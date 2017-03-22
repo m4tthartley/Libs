@@ -1,10 +1,26 @@
 
+/*
+	Rain library? A media library called Rain?
+	Using data based api ideas from Per Vognsen's platform library Mu
+*/
+
 #include <windows.h>
 #include <GL/gl.h>
 #include <dsound.h>
 
 #include <stdio.h>
 #include <math.h>
+
+void debug_print(char *str, ...) {
+	va_list args;
+	va_start(args, str);
+
+	char buf[256];
+	vsprintf_s(buf, 256, str, args);
+	OutputDebugString(buf);
+
+	va_end(args);
+}
 
 typedef enum {
 	KEYBOARD_A = 'A',
@@ -60,6 +76,19 @@ typedef enum {
 	KEYBOARD_RETURN = VK_RETURN,
 	KEYBOARD_BACKSPACE = VK_BACK,
 	KEYBOARD_ESCAPE = VK_ESCAPE,
+
+	KEYBOARD_F1 = VK_F1,
+	KEYBOARD_F2 = VK_F2,
+	KEYBOARD_F3 = VK_F3,
+	KEYBOARD_F4 = VK_F4,
+	KEYBOARD_F5 = VK_F5,
+	KEYBOARD_F6 = VK_F6,
+	KEYBOARD_F7 = VK_F7,
+	KEYBOARD_F8 = VK_F8,
+	KEYBOARD_F9 = VK_F9,
+	KEYBOARD_F10 = VK_F10,
+	KEYBOARD_F11 = VK_F11,
+	KEYBOARD_F12 = VK_F12,
 } KeyID;
 
 LARGE_INTEGER _globalPerformanceFrequency = {0};
@@ -85,7 +114,53 @@ typedef struct {
 	bool soundDisabled;
 } OSState;
 
-OSState *_globalState;
+//typedef enum {
+//	VIDEO_MODE_SOFTWARE,
+//	VIDEO_MODE_HARDWARE,
+//} VideoMode;
+
+typedef struct {
+	HWND window;
+	HDC hdc;
+	BITMAPINFO bitmap_info;
+} RainWin32;
+typedef struct {
+	bool down;
+	bool pressed;
+	bool released;
+} digital_button;
+typedef struct {
+	RainWin32 win32;
+
+	bool quit;
+	int window_width;
+	int window_height;
+	char *window_title;
+
+	bool software_video;
+	int software_video_width;
+	int software_video_height;
+	int *video_memory;
+
+	struct {
+		bool keys[256];
+		bool keys_last[256];
+	} input;
+	struct {
+		int2 position;
+		int2 position_delta;
+		digital_button left;
+		digital_button right;
+		digital_button middle;
+		int wheel_delta;
+	} mouse;
+} Rain;
+
+void update_digital_button(digital_button *button, bool new_state) {
+	button->pressed = new_state && !button->down;
+	button->released = !new_state && button->down;
+	button->down = new_state;
+}
 
 #define PrintOut(...) fprintf(stdout, __VA_ARGS__);
 #define PrintErr(...) fprintf(stderr, __VA_ARGS__);
@@ -117,14 +192,40 @@ float ConvertToSeconds (int64 time) {
 }
 
 LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+	Rain *rain = GetWindowLongPtr(hwnd, GWLP_USERDATA);
+
 	LRESULT result = 0;
 	switch (message) {
-		case WM_CLOSE: {
-			_globalState->windowOpen = false;
-		} break;
 		case WM_DESTROY: {
-			_globalState->windowOpen = false;
+			rain->quit = true;
+			OutputDebugString("WM_DESTROY");
 		} break;
+		case WM_INPUT: {
+			RAWINPUT raw = {0};
+			UINT cbsize = sizeof(raw);
+			int x = GetRawInputData(lParam, RID_INPUT, &raw, &cbsize, sizeof(RAWINPUTHEADER));
+			int y = 0;
+			if (raw.header.dwType == RIM_TYPEMOUSE && raw.data.mouse.usFlags == MOUSE_MOVE_RELATIVE) {
+				rain->mouse.position_delta.x += raw.data.mouse.lLastX;
+				rain->mouse.position_delta.y += raw.data.mouse.lLastY;
+
+				USHORT flags = raw.data.mouse.usButtonFlags;
+				if (flags & RI_MOUSE_LEFT_BUTTON_DOWN) update_digital_button(&rain->mouse.left, true);
+				if (flags & RI_MOUSE_LEFT_BUTTON_UP) update_digital_button(&rain->mouse.left, false);
+				if (flags & RI_MOUSE_RIGHT_BUTTON_DOWN) update_digital_button(&rain->mouse.right, true);
+				if (flags & RI_MOUSE_RIGHT_BUTTON_UP) update_digital_button(&rain->mouse.right, false);
+				if (flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) update_digital_button(&rain->mouse.middle, true);
+				if (flags & RI_MOUSE_MIDDLE_BUTTON_UP) update_digital_button(&rain->mouse.middle, false);
+
+				if (flags & RI_MOUSE_WHEEL) {
+					SHORT w = raw.data.mouse.usButtonData;
+					rain->mouse.wheel_delta += (w/ WHEEL_DELTA);
+				}
+			}
+
+			result = DefWindowProc(hwnd, message, wParam, lParam);
+			break;
+		}
 		default: {
 			result = DefWindowProc(hwnd, message, wParam, lParam);
 		} break;
@@ -132,100 +233,27 @@ LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 	return result;
 }
 
-typedef struct {
-	void (*proc) (void *udata);
-} WorkerThreadJob;
-typedef struct {
-	HANDLE semaphore;
-	WorkerThreadJob jobs[1024];
-	int jobCount;
-} WorkerThreadPool;
-
-struct {
-	int id;
-	int value;
-} results[100];
-int resultCount = 0;
-int num = 0;
-DWORD WorkerThreadProc (LPVOID udata) {
-	WorkerThreadPool *workerThreadPool = (WorkerThreadPool*)udata;
-	DWORD threadId = GetThreadId(GetCurrentThread());
-	for (;;) {
-		WaitForSingleObject(workerThreadPool->semaphore, INFINITE);
-		if (workerThreadPool->jobCount > 0) {
-			void (*proc) (void *udata) = workerThreadPool->jobs[workerThreadPool->jobCount-1].proc;
-			workerThreadPool->jobCount--;
-			proc(NULL);
-			Sleep(10);
-		} else {
-			OutputDebugString("thread woke up when no jobs are available\n");
-		}
-	}
-	return 0;
-}
-
-void CreateWorkerThreadPool (WorkerThreadPool *workerThreadPool) {
-	ZeroStruct(*workerThreadPool);
-	workerThreadPool->semaphore = CreateSemaphore(0, 0, 1024, NULL);
-	for (int i = 0; i < 4; ++i) {
-		DWORD id;
-		CreateThread(0, 0, WorkerThreadProc, workerThreadPool, 0, &id);
-	}
-}
-
-void AddWorkerThreadJob (WorkerThreadPool *workerThreadPool, void (*proc) (void *udata), void *udata) {
-	workerThreadPool->jobs[workerThreadPool->jobCount].proc = proc;
-	++workerThreadPool->jobCount;
-	ReleaseSemaphore(workerThreadPool->semaphore, 1, NULL);
-}
-
-void AddResult (void *udata) {
-	DWORD threadId = GetThreadId(GetCurrentThread());
-	results[resultCount].id = threadId;
-	results[resultCount].value = num;
-	++resultCount;
-	++num;
-}
-
-void WorkerThreadTest () {
-	WorkerThreadPool workerThreads;
-	CreateWorkerThreadPool(&workerThreads);
-	/*semaphoreHandle = CreateSemaphore(0, 0, 1024, NULL);
-	for (int i = 0; i < 4; ++i) {
-		DWORD id;
-		CreateThread(0, 0, WorkerThreadProc, NULL, 0, &id);
-	}
-
-	ReleaseSemaphore(semaphoreHandle, 1, NULL);
-	ReleaseSemaphore(semaphoreHandle, 1, NULL);*/
-
-	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
-	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
-	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
-	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
-	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
-	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
-	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
-	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
-	Sleep(1000);
-
-	for (int i = 0; i < resultCount; ++i) {
-		char str[64];
-		sprintf(str, "value %i, thread %i\n", results[i].value, results[i].id);
-		OutputDebugString(str);
-	}
-}
-
-void PollEvents (OSState *os) {
+void PollEvents (Rain *rain) {
 	// memset(&os->input.
 	//os->input.keysLast[Message.wParam] = os->input.keys[Message.wParam];
-	memcpy(os->input.keysLast, os->input.keys, sizeof(os->input.keys));
+	memcpy(rain->input.keys_last, rain->input.keys, sizeof(rain->input.keys));
 
 	POINT mouse;
 	GetCursorPos(&mouse);
-	ScreenToClient(os->_window, &mouse);
-	os->input.mouse.x = mouse.x;
-	os->input.mouse.y = mouse.y;
+	ScreenToClient(rain->win32.window, &mouse);
+	rain->mouse.position.x = mouse.x;
+	rain->mouse.position.y = mouse.y;
+
+	rain->mouse.position_delta.x = 0;
+	rain->mouse.position_delta.y = 0;
+	rain->mouse.wheel_delta = 0;
+
+	rain->mouse.left.pressed = false;
+	rain->mouse.left.released = false;
+	rain->mouse.right.pressed = false;
+	rain->mouse.right.released = false;
+	rain->mouse.middle.pressed = false;
+	rain->mouse.middle.released = false;
 
 	MSG Message;
 	while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE)) {
@@ -241,16 +269,12 @@ void PollEvents (OSState *os) {
 					} break;
 				}
 
-				os->input.keys[Message.wParam] = true;
+				rain->input.keys[Message.wParam] = true;
 			} break;
 
 			case WM_SYSKEYUP:
 			case WM_KEYUP: {
-				os->input.keys[Message.wParam] = false;
-			} break;
-
-			case WM_QUIT: {
-				_globalState->windowOpen = false;
+				rain->input.keys[Message.wParam] = false;
 			} break;
 			default: {
 				TranslateMessage(&Message);
@@ -269,146 +293,168 @@ bool KeyPressed (OSState *os, KeyID key) {
 	return os->input.keys[key] && !os->input.keysLast[key];
 }
 
-void InitSoftwareVideo (OSState *os, int windowWidth, int windowHeight, int backBufferWidth, int backBufferHeight) {
-	_globalState = os;
-
+bool rain_create_window(Rain *rain) {
 	WNDCLASS windowClass = {0};
-	windowClass.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
+	windowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
 	windowClass.lpfnWndProc = WindowCallback;
 	// @note: Apparently getting the hInstance this way can cause issues if used in a dll
 	HMODULE hInstance = GetModuleHandle(NULL);
 	windowClass.hInstance = hInstance;
-	windowClass.lpszClassName = "Win32 window class";
+	windowClass.lpszClassName = "RainWindowClass";
 	windowClass.hCursor = LoadCursor(0, IDC_ARROW);
 
-	os->windowWidth = windowWidth;
-	os->windowHeight = windowHeight;
 	RECT windowRect;
 	windowRect.left = 0;
-	windowRect.right = windowWidth;
+	windowRect.right = rain->window_width;
 	windowRect.top = 0;
-	windowRect.bottom = windowHeight;
-	AdjustWindowRectEx(&windowRect, WS_OVERLAPPEDWINDOW|WS_VISIBLE, FALSE, 0);
+	windowRect.bottom = rain->window_height;
+	AdjustWindowRectEx(&windowRect, WS_OVERLAPPEDWINDOW | WS_VISIBLE, FALSE, 0);
 
 	if (RegisterClassA(&windowClass)) {
-		os->_window = CreateWindowExA(0, windowClass.lpszClassName, "Software renderer", WS_OVERLAPPEDWINDOW|WS_VISIBLE,
+		if (!rain->window_title) rain->window_title = "Rain";
+		rain->win32.window = CreateWindowExA(0, windowClass.lpszClassName, rain->window_title, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
 			CW_USEDEFAULT, CW_USEDEFAULT,
-			windowRect.right-windowRect.left,
-			windowRect.bottom-windowRect.top,
+			windowRect.right - windowRect.left,
+			windowRect.bottom - windowRect.top,
 			0, 0, hInstance, 0);
 
-		if (os->_window) {
-			os->windowOpen = true;
-			UpdateWindow(os->_window);
+		if (rain->win32.window) {
+			rain->quit = false;
+			UpdateWindow(rain->win32.window);
 
-			os->hdc = GetDC(os->_window);
-
-			ZeroStruct(os->bitmapInfo);
-			os->bitmapInfo.bmiHeader.biSize = sizeof(os->bitmapInfo.bmiHeader);
-			os->backBufferWidth = backBufferWidth;
-			os->backBufferHeight = backBufferHeight;
-			os->bitmapInfo.bmiHeader.biWidth = os->backBufferWidth;
-			os->bitmapInfo.bmiHeader.biHeight = os->backBufferHeight;
-			os->bitmapInfo.bmiHeader.biPlanes = 1;
-			os->bitmapInfo.bmiHeader.biBitCount = 32;
-			os->bitmapInfo.bmiHeader.biCompression = BI_RGB;
-
-			HBITMAP hBitmap = CreateDIBSection (os->hdc, &os->bitmapInfo, DIB_RGB_COLORS, &os->videoMemory, 0, 0);
+			rain->win32.hdc = GetDC(rain->win32.window);
 		} else {
+			PrintErr("Error while creating window\n");
+			//goto error;
+			return false;
+		}
+	} else {
+		PrintErr("Error while registering window class\n");
+		//goto error;
+		return false;
+	}
+
+	// register raw input mouse
+	RAWINPUTDEVICE mouse_raw_input;
+	mouse_raw_input.usUsagePage = 1;
+	mouse_raw_input.usUsage = 2;
+	mouse_raw_input.dwFlags = 0;
+	mouse_raw_input.hwndTarget = rain->win32.window;
+	if (!RegisterRawInputDevices(&mouse_raw_input, 1, sizeof(mouse_raw_input))) {
+		debug_print("failed to register raw input mouse\n");
+		__debugbreak();
+	}
+
+	return true;
+}
+
+void InitSoftwareVideo (Rain *rain) {
+	//WNDCLASS windowClass = {0};
+	//windowClass.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
+	//windowClass.lpfnWndProc = WindowCallback;
+	//// @note: Apparently getting the hInstance this way can cause issues if used in a dll
+	//HMODULE hInstance = GetModuleHandle(NULL);
+	//windowClass.hInstance = hInstance;
+	//windowClass.lpszClassName = "Win32 window class";
+	//windowClass.hCursor = LoadCursor(0, IDC_ARROW);
+
+	//os->windowWidth = windowWidth;
+	//os->windowHeight = windowHeight;
+	//RECT windowRect;
+	//windowRect.left = 0;
+	//windowRect.right = windowWidth;
+	//windowRect.top = 0;
+	//windowRect.bottom = windowHeight;
+	//AdjustWindowRectEx(&windowRect, WS_OVERLAPPEDWINDOW|WS_VISIBLE, FALSE, 0);
+
+	//if (RegisterClassA(&windowClass)) {
+	//	os->_window = CreateWindowExA(0, windowClass.lpszClassName, "Software renderer", WS_OVERLAPPEDWINDOW|WS_VISIBLE,
+	//		CW_USEDEFAULT, CW_USEDEFAULT,
+	//		windowRect.right-windowRect.left,
+	//		windowRect.bottom-windowRect.top,
+	//		0, 0, hInstance, 0);
+
+		//if (os->_window) {
+			
+			//UpdateWindow(os->_window);
+
+			//os->hdc = GetDC(os->_window);
+
+	if (!rain_create_window(rain)) goto error;
+
+	if (!rain->software_video_width || !rain->software_video_height) {
+		rain->software_video_width = rain->window_width;
+		rain->software_video_height = rain->window_height;
+	}
+
+	ZeroStruct(rain->win32.bitmap_info);
+	rain->win32.bitmap_info.bmiHeader.biSize = sizeof(rain->win32.bitmap_info.bmiHeader);
+	/*rain->win32.backBufferWidth = backBufferWidth;
+	rain->win32.backBufferHeight = backBufferHeight;*/
+	rain->win32.bitmap_info.bmiHeader.biWidth = rain->software_video_width;
+	rain->win32.bitmap_info.bmiHeader.biHeight = rain->software_video_height;
+	rain->win32.bitmap_info.bmiHeader.biPlanes = 1;
+	rain->win32.bitmap_info.bmiHeader.biBitCount = 32;
+	rain->win32.bitmap_info.bmiHeader.biCompression = BI_RGB;
+
+	HBITMAP hBitmap = CreateDIBSection(rain->win32.hdc, &rain->win32.bitmap_info, DIB_RGB_COLORS, &rain->video_memory, 0, 0);
+
+	/*	} else {
 			PrintErr("Error while creating window\n");
 			goto error;
 		}
 	} else {
 		PrintErr("Error while registering window class\n");
 		goto error;
-	}
+	}*/
 
 	return;
 error:
-	MessageBox(os->_window, "There was an error initializing software video", NULL, MB_OK);
+	MessageBox(rain->win32.window, "There was an error initializing software video", NULL, MB_OK);
 	exit(1);
 }
 
-void InitOpenglVideo (OSState *os, int windowWidth, int windowHeight) {
-	_globalState = os;
+void InitOpenglVideo (Rain *rain) {
+	//_globalState = os;
 	freopen("stdout.txt", "a", stdout);
 	freopen("stderr.txt", "a", stderr);
 
-	WNDCLASS windowClass = {0};
-	windowClass.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
-	windowClass.lpfnWndProc = WindowCallback;
-	// @note: Apparently getting the hInstance this way can cause issues if used in a dll
-	HMODULE hInstance = GetModuleHandle(NULL);
-	windowClass.hInstance = hInstance;
-	windowClass.lpszClassName = "Win32 window class";
-	windowClass.hCursor = LoadCursor(0, IDC_ARROW);
+	if (!rain_create_window(rain)) goto error;
 
-	os->windowWidth = windowWidth;
-	os->windowHeight = windowHeight;
-	RECT windowRect;
-	windowRect.left = 0;
-	windowRect.right = windowWidth;
-	windowRect.top = 0;
-	windowRect.bottom = windowHeight;
-	AdjustWindowRectEx(&windowRect, WS_OVERLAPPEDWINDOW|WS_VISIBLE, FALSE, 0);
+	PIXELFORMATDESCRIPTOR pixelFormat = {0};
+	pixelFormat.nSize = sizeof(PIXELFORMATDESCRIPTOR);
+	pixelFormat.nVersion = 1;
+	pixelFormat.iPixelType = PFD_TYPE_RGBA;
+	pixelFormat.dwFlags = PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW | PFD_DOUBLEBUFFER;
+	pixelFormat.cColorBits = 32;
+	pixelFormat.cAlphaBits = 8;
+	pixelFormat.iLayerType = PFD_MAIN_PLANE;
 
-	if (RegisterClassA(&windowClass)) {
-		os->_window = CreateWindowExA(0, windowClass.lpszClassName, "OpenGL", WS_OVERLAPPEDWINDOW|WS_VISIBLE,
-									  CW_USEDEFAULT, CW_USEDEFAULT,
-									  windowRect.right-windowRect.left,
-									  windowRect.bottom-windowRect.top,
-									  0, 0, hInstance, 0);
+	int suggestedIndex = ChoosePixelFormat(rain->win32.hdc, &pixelFormat);
+	if (!suggestedIndex) {
+		PrintErr("ChoosePixelFormat failed\n");
+		goto error;
+	}
+	PIXELFORMATDESCRIPTOR suggested;
+	DescribePixelFormat(rain->win32.hdc, suggestedIndex, sizeof(PIXELFORMATDESCRIPTOR), &suggested);
+	if (!SetPixelFormat(rain->win32.hdc, suggestedIndex, &suggested)) {
+		PrintErr("SetPixelFormat failed\n");
+		goto error;
+	}
 
-		if (os->_window) {
-			os->windowOpen = true;
-			UpdateWindow(os->_window);
-
-			os->hdc = GetDC(os->_window);
-
-			{
-				PIXELFORMATDESCRIPTOR pixelFormat = {0};
-				pixelFormat.nSize = sizeof(PIXELFORMATDESCRIPTOR);
-				pixelFormat.nVersion = 1;
-				pixelFormat.iPixelType = PFD_TYPE_RGBA;
-				pixelFormat.dwFlags = PFD_SUPPORT_OPENGL|PFD_DRAW_TO_WINDOW|PFD_DOUBLEBUFFER;
-				pixelFormat.cColorBits = 32;
-				pixelFormat.cAlphaBits = 8;
-				pixelFormat.iLayerType = PFD_MAIN_PLANE;
-
-				int suggestedIndex = ChoosePixelFormat(os->hdc, &pixelFormat);
-				if (!suggestedIndex) {
-					PrintErr("ChoosePixelFormat failed\n");
-					goto error;
-				}
-				PIXELFORMATDESCRIPTOR suggested;
-				DescribePixelFormat(os->hdc, suggestedIndex, sizeof(PIXELFORMATDESCRIPTOR), &suggested);
-				if (!SetPixelFormat(os->hdc, suggestedIndex, &suggested)) {
-					PrintErr("SetPixelFormat failed\n");
-					goto error;
-				}
-
-				HGLRC glContext = wglCreateContext(os->hdc);
-				if (!glContext) {
-					PrintErr("wglCreateContext failed\n");
-					goto error;
-				}
-				if (!wglMakeCurrent(os->hdc, glContext)) {
-					PrintErr("wglMakeCurrent failed\n");
-					goto error;
-				}
-			}
-		} else {
-			PrintErr("Error while creating window\n");
-			goto error;
-		}
-	} else {
-		PrintErr("Error while registering window class\n");
+	HGLRC glContext = wglCreateContext(rain->win32.hdc);
+	if (!glContext) {
+		PrintErr("wglCreateContext failed\n");
+		goto error;
+	}
+	if (!wglMakeCurrent(rain->win32.hdc, glContext)) {
+		PrintErr("wglMakeCurrent failed\n");
 		goto error;
 	}
 
 	return;
 error:
-	MessageBox(os->_window, "There was an error initializing OpenGL video", NULL, MB_OK);
+	MessageBox(rain->win32.window, "There was an error initializing OpenGL video", NULL, MB_OK);
 	exit(1);
 }
 
@@ -420,7 +466,16 @@ error:
 typedef enum {
 	PIXEL_FORMAT_FLOAT,
 	PIXEL_FORMAT_UBYTE,
+	/*
+		PIXEL_FORMAT_FLOAT
+		PIXEL_FORMAT_FLOAT_RGBA
+		PIXEL_FORMAT_INT_R8G8B8A8
+		PIXEL_FORMAT_INT_R16G16B16A16
+		PIXEL_FORMAT_INT_R32G32B32A32
+	*/
 } SoftwarePixelFormat;
+
+#define rgba_to_argb(r, g, b, a) (((a&0xFF)<<24) | ((r&0xFF)<<16) | ((g&0xFF)<<8) | b&0xFF)
 
 void DisplaySoftwareGraphics (OSState *os, void *data, SoftwarePixelFormat format, int numComponents) {
 	unsigned int *pixels = (unsigned int*)os->videoMemory;
@@ -457,6 +512,37 @@ void DisplaySoftwareGraphics (OSState *os, void *data, SoftwarePixelFormat forma
 
 void FinishVideo (OSState *os) {
 	SwapBuffers(os->hdc);
+}
+
+void rain_init(Rain *rain) {
+	if (!rain->window_width || !rain->window_height) {
+		rain->window_width = 1280;
+		rain->window_height = 720;
+	}
+
+	if (rain->software_video) {
+		InitSoftwareVideo(rain);
+	} else {
+		InitOpenglVideo(rain);
+	}
+
+	SetWindowLongPtr(rain->win32.window, GWLP_USERDATA, rain);
+}
+
+void rain_update(Rain *rain) {
+	if (rain->software_video) {
+		//InitSoftwareVideo(rain);
+		StretchDIBits(rain->win32.hdc, 0, 0,
+					  rain->window_width, rain->window_height,
+					  0, 0,
+					  rain->software_video_width, rain->software_video_height,
+					  rain->video_memory, &rain->win32.bitmap_info, DIB_RGB_COLORS, SRCCOPY);
+	} else {
+		SwapBuffers(rain->win32.hdc); // todo: if this is meant for the top of the loop
+									  // then don't swap the first time
+	}
+
+	PollEvents(rain);
 }
 
 /*int CALLBACK WinMain (HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR cmdLine, int cmdShow) {
@@ -515,8 +601,8 @@ typedef struct {
 
 Sound LoadSoundFromMemory (void *data, size_t size) {
 	WavHeader *header = data;
-	WavFormatChunk *format;
-	WavDataChunk *dataChunk;
+	WavFormatChunk *format = NULL;
+	WavDataChunk *dataChunk = NULL;
 	char *f = (char*)(header + 1);
 	while (f < (char*)data + size) {
 		int id = *(int*)f;
@@ -532,11 +618,13 @@ Sound LoadSoundFromMemory (void *data, size_t size) {
 	}
 
 	Sound sound;
-	sound.channels = format->channels;
-	sound.samplesPerSec = format->samplesPerSec;
-	sound.bitsPerSample = format->bitsPerSample;
-	sound.data = dataChunk->data;
-	sound.size = dataChunk->size;
+	if (format && dataChunk) {
+		sound.channels = format->channels;
+		sound.samplesPerSec = format->samplesPerSec;
+		sound.bitsPerSample = format->bitsPerSample;
+		sound.data = dataChunk->data;
+		sound.size = dataChunk->size;
+	}
 	return sound;
 }
 
@@ -854,4 +942,90 @@ void UpdateSound (OSState *os) {
 	LeaveCriticalSection(&playingSoundsLock);
 
 	paintedEnd = end;
+}
+
+// Threading test stuff
+typedef struct {
+	void(*proc) (void *udata);
+} WorkerThreadJob;
+typedef struct {
+	HANDLE semaphore;
+	WorkerThreadJob jobs[1024];
+	int jobCount;
+} WorkerThreadPool;
+
+struct {
+	int id;
+	int value;
+} results[100];
+int resultCount = 0;
+int num = 0;
+DWORD WorkerThreadProc(LPVOID udata) {
+	WorkerThreadPool *workerThreadPool = (WorkerThreadPool*)udata;
+	DWORD threadId = GetThreadId(GetCurrentThread());
+	for (;;) {
+		WaitForSingleObject(workerThreadPool->semaphore, INFINITE);
+		if (workerThreadPool->jobCount > 0) {
+			void(*proc) (void *udata) = workerThreadPool->jobs[workerThreadPool->jobCount - 1].proc;
+			workerThreadPool->jobCount--;
+			proc(NULL);
+			Sleep(10);
+		}
+		else {
+			OutputDebugString("thread woke up when no jobs are available\n");
+		}
+	}
+	return 0;
+}
+
+void CreateWorkerThreadPool(WorkerThreadPool *workerThreadPool) {
+	ZeroStruct(*workerThreadPool);
+	workerThreadPool->semaphore = CreateSemaphore(0, 0, 1024, NULL);
+	for (int i = 0; i < 4; ++i) {
+		DWORD id;
+		CreateThread(0, 0, WorkerThreadProc, workerThreadPool, 0, &id);
+	}
+}
+
+void AddWorkerThreadJob(WorkerThreadPool *workerThreadPool, void(*proc) (void *udata), void *udata) {
+	workerThreadPool->jobs[workerThreadPool->jobCount].proc = proc;
+	++workerThreadPool->jobCount;
+	ReleaseSemaphore(workerThreadPool->semaphore, 1, NULL);
+}
+
+void AddResult(void *udata) {
+	DWORD threadId = GetThreadId(GetCurrentThread());
+	results[resultCount].id = threadId;
+	results[resultCount].value = num;
+	++resultCount;
+	++num;
+}
+
+void WorkerThreadTest() {
+	WorkerThreadPool workerThreads;
+	CreateWorkerThreadPool(&workerThreads);
+	/*semaphoreHandle = CreateSemaphore(0, 0, 1024, NULL);
+	for (int i = 0; i < 4; ++i) {
+	DWORD id;
+	CreateThread(0, 0, WorkerThreadProc, NULL, 0, &id);
+	}
+
+	ReleaseSemaphore(semaphoreHandle, 1, NULL);
+	ReleaseSemaphore(semaphoreHandle, 1, NULL);*/
+
+	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
+	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
+	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
+	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
+	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
+	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
+	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
+	AddWorkerThreadJob(&workerThreads, AddResult, NULL);
+	Sleep(1000);
+
+	for (int i = 0; i < resultCount; ++i) {
+		char str[64];
+		sprintf(str, "value %i, thread %i\n", results[i].value, results[i].id);
+		OutputDebugString(str);
+	}
 }
