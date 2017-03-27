@@ -983,7 +983,7 @@ void CreateWorkerThreadPool(WorkerThreadPool *workerThreadPool) {
 	workerThreadPool->semaphore = CreateSemaphore(0, 0, 1024, NULL);
 	for (int i = 0; i < 4; ++i) {
 		DWORD id;
-		CreateThread(0, 0, WorkerThreadProc, workerThreadPool, 0, &id);
+		CreateThread(0, 0, (LPTHREAD_START_ROUTINE)WorkerThreadProc, workerThreadPool, 0, &id);
 	}
 }
 
