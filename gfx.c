@@ -7,6 +7,12 @@
 //#define GL_GLEXT_PROTOTYPES
 //#include "w:/lib/glext.h"
 
+#ifdef _WIN32
+#	define GLDECL WINAPI
+#else
+#	define GLDECL
+#endif
+
 typedef char GLchar;
 #define GL_FRAGMENT_SHADER                0x8B30
 #define GL_VERTEX_SHADER                  0x8B31
@@ -18,7 +24,7 @@ typedef char GLchar;
 //typedef unsigned int GLenum;
 //typedef int GLsizei;
 
-#define GL_EXTENSIONS\
+#define OPENGL_EXTENSION_LIST\
 	GLE(GLuint, CreateShader, GLenum type)\
 	GLE(void, ShaderSource, GLuint shader, GLsizei count, const GLchar * const *string, const GLint *length)\
 	GLE(void, CompileShader, GLuint shader)\
@@ -38,15 +44,15 @@ typedef char GLchar;
 	GLE(GLint, GetAttribLocation_proc, GLuint program, const GLchar *name)\
 
 
-#define GLE(ret, name, ...) typedef ret name##_proc(__VA_ARGS__); name##_proc *gl##name;
-GL_EXTENSIONS
+#define GLE(ret, name, ...) typedef ret (GLDECL name##_proc)(__VA_ARGS__); name##_proc *gl##name;
+OPENGL_EXTENSION_LIST
 #undef GLE
 
 void load_opengl_extensions() {
 	//HMODULE opengl_lib = LoadLibraryA("opengl32.dll");
 
 #define GLE(ret, name, ...) gl##name = (name##_proc*)wglGetProcAddress("gl" #name);
-	GL_EXTENSIONS
+	OPENGL_EXTENSION_LIST
 #undef GLE
 }
 
@@ -83,7 +89,7 @@ GLuint shader_from_string(char *vs, char *fs, char *gs) {
 		int gs_error_size;
 		glGetShaderiv(gshader, GL_INFO_LOG_LENGTH, &gs_error_size);
 		if (gs_error_size) {
-			gs_error = malloc(gs_error_size);
+			gs_error = (char*)malloc(gs_error_size);
 			glGetShaderInfoLog(gshader, gs_error_size, NULL, gs_error);
 			OutputDebugString(gs_error);
 		}

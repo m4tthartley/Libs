@@ -4,6 +4,9 @@
 	Using data based api ideas from Per Vognsen's platform library Mu
 */
 
+#pragma warning(disable: 4244) // possible loss of data
+#pragma warning(disable: 4800) // forcing value to bool
+
 #include <windows.h>
 #include <GL/gl.h>
 #include <dsound.h>
@@ -165,8 +168,6 @@ void update_digital_button(digital_button *button, bool new_state) {
 #define PrintOut(...) fprintf(stdout, __VA_ARGS__);
 #define PrintErr(...) fprintf(stderr, __VA_ARGS__);
 
-int main (int argc, char**argv);
-
 double GetSeconds () {
 	if (!_globalPerformanceFrequency.QuadPart) {
 		QueryPerformanceFrequency(&_globalPerformanceFrequency);
@@ -191,8 +192,8 @@ float ConvertToSeconds (int64 time) {
 	return seconds;
 }
 
-LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
-	Rain *rain = GetWindowLongPtr(hwnd, GWLP_USERDATA);
+LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
+	Rain *rain = (Rain*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 
 	LRESULT result = 0;
 	switch (message) {
@@ -203,7 +204,7 @@ LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 		case WM_INPUT: {
 			RAWINPUT raw = {0};
 			UINT cbsize = sizeof(raw);
-			int x = GetRawInputData(lParam, RID_INPUT, &raw, &cbsize, sizeof(RAWINPUTHEADER));
+			int x = GetRawInputData((HRAWINPUT)lparam, RID_INPUT, &raw, &cbsize, sizeof(RAWINPUTHEADER));
 			int y = 0;
 			if (raw.header.dwType == RIM_TYPEMOUSE && raw.data.mouse.usFlags == MOUSE_MOVE_RELATIVE) {
 				rain->mouse.position_delta.x += raw.data.mouse.lLastX;
@@ -223,11 +224,11 @@ LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 				}
 			}
 
-			result = DefWindowProc(hwnd, message, wParam, lParam);
+			result = DefWindowProc(hwnd, message, wparam, lparam);
 			break;
 		}
 		default: {
-			result = DefWindowProc(hwnd, message, wParam, lParam);
+			result = DefWindowProc(hwnd, message, wparam, lparam);
 		} break;
 	}
 	return result;
@@ -397,7 +398,7 @@ void InitSoftwareVideo (Rain *rain) {
 	rain->win32.bitmap_info.bmiHeader.biBitCount = 32;
 	rain->win32.bitmap_info.bmiHeader.biCompression = BI_RGB;
 
-	HBITMAP hBitmap = CreateDIBSection(rain->win32.hdc, &rain->win32.bitmap_info, DIB_RGB_COLORS, &rain->video_memory, 0, 0);
+	HBITMAP hBitmap = CreateDIBSection(rain->win32.hdc, &rain->win32.bitmap_info, DIB_RGB_COLORS, (void**)&rain->video_memory, 0, 0);
 
 	/*	} else {
 			PrintErr("Error while creating window\n");
@@ -415,13 +416,14 @@ error:
 }
 
 void InitOpenglVideo (Rain *rain) {
+	PIXELFORMATDESCRIPTOR pixelFormat = {0};
+
 	//_globalState = os;
 	freopen("stdout.txt", "a", stdout);
 	freopen("stderr.txt", "a", stderr);
 
 	if (!rain_create_window(rain)) goto error;
 
-	PIXELFORMATDESCRIPTOR pixelFormat = {0};
 	pixelFormat.nSize = sizeof(PIXELFORMATDESCRIPTOR);
 	pixelFormat.nVersion = 1;
 	pixelFormat.iPixelType = PFD_TYPE_RGBA;
@@ -481,7 +483,7 @@ void DisplaySoftwareGraphics (OSState *os, void *data, SoftwarePixelFormat forma
 	unsigned int *pixels = (unsigned int*)os->videoMemory;
 
 	if (format == PIXEL_FORMAT_FLOAT) {
-		float *video = data;
+		float *video = (float*)data;
 		for (int i = 0; i < os->backBufferWidth*os->backBufferHeight; ++i) {
 			float *v = video + (i*numComponents);
 			int components = numComponents >= 4 ? numComponents : 4;
@@ -494,7 +496,7 @@ void DisplaySoftwareGraphics (OSState *os, void *data, SoftwarePixelFormat forma
 			// aarrggbb
 		}
 	} else if (format == PIXEL_FORMAT_UBYTE) {
-		uint8 *video = data;
+		uint8 *video = (uint8*)data;
 		for (int i = 0; i < os->backBufferWidth*os->backBufferHeight; ++i) {
 			uint8 *v = video + (i*numComponents);
 			int components = numComponents >= 4 ? numComponents : 4;
@@ -526,7 +528,7 @@ void rain_init(Rain *rain) {
 		InitOpenglVideo(rain);
 	}
 
-	SetWindowLongPtr(rain->win32.window, GWLP_USERDATA, rain);
+	SetWindowLongPtr(rain->win32.window, GWLP_USERDATA, (LONG)rain);
 }
 
 void rain_update(Rain *rain) {
@@ -545,14 +547,11 @@ void rain_update(Rain *rain) {
 	PollEvents(rain);
 }
 
-/*int CALLBACK WinMain (HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR cmdLine, int cmdShow) {
-	
-}*/
+#define main_entry int CALLBACK WinMain (HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR cmdLine, int cmdShow)
 
-int CALLBACK WinMain (HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR cmdLine, int cmdShow) {
-	// @note: Hopefully these arg variable are always available
-	main(__argc, __argv);
-}
+//int CALLBACK WinMain (HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR cmdLine, int cmdShow) {
+//	main(__argc, __argv);
+//}
 
 // Audio
 
@@ -600,7 +599,7 @@ typedef struct {
 } Sound;
 
 Sound LoadSoundFromMemory (void *data, size_t size) {
-	WavHeader *header = data;
+	WavHeader *header = (WavHeader*)data;
 	WavFormatChunk *format = NULL;
 	WavDataChunk *dataChunk = NULL;
 	char *f = (char*)(header + 1);
@@ -644,6 +643,10 @@ LPDIRECTSOUNDBUFFER primaryBuffer;
 LPDIRECTSOUNDBUFFER secondaryBuffer;
 CRITICAL_SECTION playingSoundsLock;
 void InitSound (OSState *os) {
+	WAVEFORMATEX wave = {0};
+	DSBUFFERDESC desc = {0};
+	DSBUFFERDESC desc2 = {0};
+
 	InitializeCriticalSectionAndSpinCount(&playingSoundsLock, 1024);
 
 	HMODULE dsoundLib = LoadLibraryA("dsound.dll");
@@ -667,7 +670,6 @@ void InitSound (OSState *os) {
 		goto error;
 	}
 
-	WAVEFORMATEX wave = {0};
 	wave.wFormatTag = WAVE_FORMAT_PCM;
 	wave.nChannels = 2;
 	wave.nSamplesPerSec = SOUND_SAMPLES_PER_SEC;
@@ -680,7 +682,6 @@ void InitSound (OSState *os) {
 		goto error;
 	}
 
-	DSBUFFERDESC desc = {0};
 	desc.dwSize = sizeof(DSBUFFERDESC);
 	desc.dwFlags = DSBCAPS_PRIMARYBUFFER;
 	if (!SUCCEEDED(IDirectSound_CreateSoundBuffer(dsound, &desc, &primaryBuffer, 0))) {
@@ -693,7 +694,6 @@ void InitSound (OSState *os) {
 		goto error;
 	}
 
-	DSBUFFERDESC desc2 = {0};
 	desc2.dwSize = sizeof(DSBUFFERDESC);
 	desc2.dwFlags = DSBCAPS_GLOBALFOCUS|DSBCAPS_GETCURRENTPOSITION2;
 	desc2.dwBufferBytes = SOUND_SAMPLES_PER_SEC * 4;
@@ -770,7 +770,7 @@ int GetSoundDeviceWriteCursor () {
 	int playCursor;
 	int writeCursor;
 	HRESULT result;
-	if (result = IDirectSoundBuffer_GetCurrentPosition(secondaryBuffer, &playCursor, &writeCursor) != DS_OK) {
+	if (result = IDirectSoundBuffer_GetCurrentPosition(secondaryBuffer, (LPDWORD)&playCursor, (LPDWORD)&writeCursor) != DS_OK) {
 		PrintErr("IDirectSoundBuffer_GetCurrentPosition error\n");
 		// @todo handle failure
 		return 0; // zero?
@@ -790,7 +790,7 @@ void WriteToSoundDevice (void *buffer, int pos, int size) {
 		return;
 	}
 	if (r = IDirectSoundBuffer_Lock(secondaryBuffer, (pos%SOUND_SAMPLES_PER_SEC)*4, size*4,
-								&region1, &region1Size, &region2, &region2Size, 0) != DS_OK) {
+								&region1, (LPDWORD)&region1Size, &region2, (LPDWORD)&region2Size, 0) != DS_OK) {
 		PrintErr("IDirectSoundBuffer_Lock error\n");
 		return;
 	}
@@ -896,7 +896,7 @@ void UpdateSound (OSState *os) {
 		int count = paintSize <= BUFFER_SIZE ? paintSize : BUFFER_SIZE;
 		bool paused = AtomicRead((long*)&soundPaused);
 		if (!paused) {
-			int soundCount = AtomicRead(&playingSoundCount);
+			int soundCount = AtomicRead((long*)&playingSoundCount);
 			for (int i = 0; i < soundCount; ++i) {
 				float sampleRateRatio = (double)playingSounds[i].sound->samplesPerSec / (double)SOUND_SAMPLES_PER_SEC;
 				int samplesToPlay = (playingSounds[i].numSamples - playingSounds[i].cursor) /** sampleRateRatio*/;
@@ -904,7 +904,7 @@ void UpdateSound (OSState *os) {
 				if ((samplesToPlay*sampleRateRatio) < size) {
 					size = (samplesToPlay*sampleRateRatio);
 				}
-				SoundSample *input = playingSounds[i].sound->data;
+				SoundSample *input = (SoundSample*)playingSounds[i].sound->data;
 				for (int j = 0; j < size; ++j) {
 					SoundSample sample;
 					float amount0 = 1.0f - playingSounds[i].cursorFract;

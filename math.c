@@ -41,6 +41,7 @@ typedef union {
 		float u;
 		float v;
 	};
+	float e[2];
 } float2;
 
 typedef union {
@@ -55,6 +56,7 @@ typedef union {
 		float b;
 	};
 	float2 xy;
+	float e[3];
 } float3;
 
 typedef union {
@@ -72,6 +74,7 @@ typedef union {
 	};
 	float3 xyz;
 	float2 xy;
+	float e[4];
 } float4;
 
 typedef union {
@@ -134,10 +137,46 @@ float2 add2(float2 a, float2 b) {
 	return result;
 }
 
+float3 add3(float3 a, float3 b) {
+	float3 result = {
+		a.x + b.x,
+		a.y + b.y,
+		a.z + b.z,
+	};
+	return result;
+}
+
 float2 sub2(float2 a, float2 b) {
 	float2 result = {
 		a.x - b.x,
 		a.y - b.y,
+	};
+	return result;
+}
+
+float3 sub3(float3 a, float3 b) {
+	float3 result = {
+		a.x - b.x,
+		a.y - b.y,
+		a.z - b.z,
+	};
+	return result;
+}
+
+float3 div3(float3 a, float3 b) {
+	float3 result = {
+		a.x / b.x,
+		a.y / b.y,
+		a.z / b.z,
+	};
+	return result;
+}
+
+float3 div3f(float3 a, float b) {
+	float3 result = {
+		a.x / b,
+		a.y / b,
+		a.z / b,
 	};
 	return result;
 }
@@ -148,9 +187,24 @@ float length2(float2 v) {
 	return result;
 }
 
+float length3(float3 v) {
+	float result = sqrtf(v.x*v.x + v.y*v.y + v.z*v.z);
+	return result;
+}
+
 float dist2(float2 a, float2 b) {
 	float2 f = {a.x-b.x, a.y-b.y};
 	float result = sqrtf(f.x*f.x + f.y*f.y);
+	return result;
+}
+
+float3 normalize(float3 v) {
+	float len = length3(v);
+	float3 result = {
+		v.x / len,
+		v.y / len,
+		v.z / len,
+	};
 	return result;
 }
 
@@ -164,15 +218,16 @@ mat4 mat4_identity() {
 	return result;
 }
 
-void make_perspective_matrix(float *out, float fov, float aspect, float near, float far) {
+mat4 make_perspective_matrix(float fov, float aspect, float near, float far) {
 	float f = 1.0f / tanf((fov/180.0f*PI) / 2.0f);
-	float mat[] = {
+	mat4 mat = {
 		f / aspect, 0, 0, 0,
 		0, f, 0, 0,
 		0, 0, (far + near) / (near - far), -1,
 		0, 0, (2.0f * far * near) / (near - far), 0,
 	};
-	memcpy(out, mat, sizeof(float)*16);
+	//memcpy(out, mat, sizeof(float)*16);
+	return mat;
 }
 
 mat4 make_ortho_matrix(float left, float top, float right, float bottom, float n, float f) {
@@ -185,16 +240,16 @@ mat4 make_ortho_matrix(float left, float top, float right, float bottom, float n
 	return result;
 }
 
-void mat4_apply_mul(float *out, mat4 mat2) {
+void mat4_apply_mul(mat4 *out, mat4 mat2) {
 	float mat1[16];
 	memcpy(mat1, out, sizeof(float)*16);
-
-	for (int i = 0; i < 16; ++i) out[i] = 0;
+	// todo: this copying and zeroing isn't actually needed
+	for (int i = 0; i < 16; ++i) out->e[i] = 0;
 
 	for (int row = 0; row < 4; ++row) {
 		for (int col = 0; col < 4; ++col) {
 			for (int i = 0; i < 4; ++i) {
-				out[row*4 + col] += mat1[row*4 + i] * mat2.e[i*4 + col];
+				out->e[row*4 + col] += mat1[row*4 + i] * mat2.e[i*4 + col];
 			}
 		}
 	}
@@ -214,7 +269,7 @@ mat4 mat4_mul(mat4 m1, mat4 m2) {
 	return out;
 }
 
-void mat4_apply_translation(mat4 *m, float3 pos) {
+void mat4_apply_translate(mat4 *m, float3 pos) {
 	mat4 result = {
 		1, 0, 0, 0,
 		0, 1, 0, 0,
@@ -222,6 +277,16 @@ void mat4_apply_translation(mat4 *m, float3 pos) {
 		pos.x, pos.y, pos.z, 1,
 	};
 	mat4_apply_mul(m, result);
+}
+
+mat4 mat4_translate(float3 pos) {
+	mat4 result = {
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		pos.x, pos.y, pos.z, 1,
+	};
+	return result;
 }
 
 void mat4_apply_rotate_x(mat4 *m, float rads) {
@@ -265,35 +330,30 @@ mat4 euler_to_mat4(float3 euler) {
 	return result;
 }
 
-void float4_apply_mat4(float *out, float *mat) {
-	float4 ff = *(float4*)out;
-	//ZeroStruct(ff);
-	memset(out, 0, sizeof(float)*4);
-	float *f = &ff;
+void float4_apply_mat4(float4 *out, mat4 mat) {
+	float4 f = *out;
+	memset(out, 0, sizeof(float4));
 
-	/*for (int row = 0; row < 4; ++row)*/ {
-		for (int col = 0; col < 4; ++col) {
-			for (int i = 0; i < 4; ++i) {
-				out[col] += f[i] * /*mat[col*4 + i]*/mat[i*4 + col];
-			}
+	for (int col = 0; col < 4; ++col) {
+		for (int i = 0; i < 4; ++i) {
+			out->e[col] += f.e[i] * mat.e[i*4 + col];
 		}
 	}
 }
 
-void float4_apply_perspective(float *out, float *mat) {
-	float4 ff = *(float4*)out;
-	memset(out, 0, sizeof(float)*4);
-	float *f = &ff;
+void float4_apply_perspective(float4 *out, mat4 mat) {
+	float4 f = *out;
+	memset(out, 0, sizeof(float4));
 
 	for (int col = 0; col < 4; ++col) {
 		for (int i = 0; i < 4; ++i) {
-			out[col] += f[i] * mat[i*4 + col];
+			out->e[col] += f.e[i] * mat.e[i*4 + col];
 		}
 	}
 
-	out[0] /= out[3];
-	out[1] /= out[3];
-	out[2] /= out[3];
+	out->e[0] /= out->e[3];
+	out->e[1] /= out->e[3];
+	out->e[2] /= out->e[3];
 }
 
 quaternion quaternion_identity() {
