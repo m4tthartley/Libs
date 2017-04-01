@@ -7,6 +7,8 @@
 //#define GL_GLEXT_PROTOTYPES
 //#include "w:/lib/glext.h"
 
+#pragma warning(disable: 4838)
+
 #ifdef _WIN32
 #	define GLDECL WINAPI
 #else
@@ -18,6 +20,8 @@ typedef char GLchar;
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_GEOMETRY_SHADER                0x8DD9
 #define GL_INFO_LOG_LENGTH                0x8B84
+#define GL_MULTISAMPLE                    0x809D
+#define GL_MULTISAMPLE_ARB                0x809D
 
 //typedef unsigned int GLuint;
 //typedef int GLint;
@@ -41,7 +45,7 @@ typedef char GLchar;
 	GLE(GLint, GetUniformLocation, GLuint program, const GLchar *name)\
 	GLE(void, UniformMatrix4fv, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value)\
 	GLE(void, Uniform4f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3)\
-	GLE(GLint, GetAttribLocation_proc, GLuint program, const GLchar *name)\
+	GLE(GLint, GetAttribLocation, GLuint program, const GLchar *name)\
 
 
 #define GLE(ret, name, ...) typedef ret (GLDECL name##_proc)(__VA_ARGS__); name##_proc *gl##name;
@@ -61,12 +65,32 @@ void load_opengl_extensions() {
 char *vs_error = NULL;
 char *fs_error = NULL;
 char *gs_error = NULL;
+
+GLuint create_gl_shader(char *source, int len, GLenum type) {
+	GLuint shader = glCreateShader(type);
+	//int glen = strlen(source);
+	glShaderSource(shader, 1, &source, &len);
+	glCompileShader(shader);
+	int error_size;
+	glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &error_size);
+	if (error_size) {
+		char *error_out;
+		if (type == GL_VERTEX_SHADER) error_out = vs_error;
+		if (type == GL_FRAGMENT_SHADER) error_out = fs_error;
+		if (type == GL_GEOMETRY_SHADER) error_out = gs_error;
+		error_out = (char*)malloc(error_size);
+		glGetShaderInfoLog(shader, error_size, NULL, error_out);
+		OutputDebugString(error_out);
+	}
+	return shader;
+}
+
 GLuint shader_from_string(char *vs, char *fs, char *gs) {
 	vs_error = NULL;
 	fs_error = NULL;
 	gs_error = NULL;
 
-	GLuint vshader = glCreateShader(GL_VERTEX_SHADER);
+	/*GLuint vshader = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fshader = glCreateShader(GL_FRAGMENT_SHADER);
 	int vlen = strlen(vs);
 	int flen = strlen(fs);
@@ -93,14 +117,80 @@ GLuint shader_from_string(char *vs, char *fs, char *gs) {
 			glGetShaderInfoLog(gshader, gs_error_size, NULL, gs_error);
 			OutputDebugString(gs_error);
 		}
-	}
+	}*/
 
 	GLuint program = glCreateProgram();
-	glAttachShader(program, vshader);
-	glAttachShader(program, fshader);
-	if (gs) glAttachShader(program, gshader);
+	if (vs) {
+		GLuint shader = create_gl_shader(vs, strlen(vs), GL_VERTEX_SHADER);
+		glAttachShader(program, shader);
+	}
+	if (fs) {
+		GLuint shader = create_gl_shader(fs, strlen(fs), GL_FRAGMENT_SHADER);
+		glAttachShader(program, shader);
+	}
+	if (gs) {
+		GLuint shader = create_gl_shader(gs, strlen(gs), GL_GEOMETRY_SHADER);
+		glAttachShader(program, shader);
+	}
+	
+	//glAttachShader(program, fshader);
+	//if (gs) glAttachShader(program, gshader);
+
 	glLinkProgram(program);
 
+	return program;
+}
+
+typedef enum {
+	SHADER_VERTEX		= (1<<0),
+	SHADER_PIXEL		= (1<<1),
+	SHADER_GEOMETRY		= (1<<2),
+} ShaderType;
+
+GLuint create_gl_shader_file(char *source, int len, GLenum type) {
+	GLuint shader = glCreateShader(type);
+	//int glen = strlen(source);
+	char *sources[2];
+	sources[1] = source;
+	if (type == GL_VERTEX_SHADER) sources[0] = "#version 330\n#define SHADER_VERTEX\n";
+	if (type == GL_FRAGMENT_SHADER) sources[0] = "#version 330\n#define SHADER_PIXEL\n";
+	if (type == GL_GEOMETRY_SHADER) sources[0] = "#version 330\n#define SHADER_GEOMETRY\n";
+	int lens[2] = {strlen(sources[0]), len};
+	glShaderSource(shader, 2, sources, lens);
+	glCompileShader(shader);
+	int error_size;
+	glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &error_size);
+	if (error_size) {
+		char *error_out;
+		if (type == GL_VERTEX_SHADER) error_out = vs_error;
+		if (type == GL_FRAGMENT_SHADER) error_out = fs_error;
+		if (type == GL_GEOMETRY_SHADER) error_out = gs_error;
+		error_out = (char*)malloc(error_size);
+		glGetShaderInfoLog(shader, error_size, NULL, error_out);
+		OutputDebugString(error_out);
+	}
+	return shader;
+}
+
+GLuint shader_from_file(char *file_name, int shader_types) {
+	HANDLE file = CreateFileA(file_name, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	int file_size = GetFileSize(file, 0);
+	HANDLE file_mapping = CreateFileMappingA(file, NULL, PAGE_WRITECOPY, 0, 0, 0);
+	char *source = (char*)MapViewOfFileEx(file_mapping, FILE_MAP_COPY, 0, 0, 0, 0);
+	GLuint program = glCreateProgram();
+	if (shader_types & SHADER_VERTEX) {
+		GLuint shader = create_gl_shader_file(source, file_size, GL_VERTEX_SHADER);
+		glAttachShader(program, shader);
+	}
+	if (shader_types & SHADER_PIXEL) {
+		GLuint shader = create_gl_shader_file(source, file_size, GL_FRAGMENT_SHADER);
+		glAttachShader(program, shader);
+	}
+	if (shader_types & SHADER_GEOMETRY) {
+		GLuint shader = create_gl_shader_file(source, file_size, GL_GEOMETRY_SHADER);
+		glAttachShader(program, shader);
+	}
+	glLinkProgram(program);
 	return program;
 }
 
