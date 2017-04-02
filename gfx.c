@@ -38,6 +38,7 @@ typedef char GLchar;
 	GLE(void, GetShaderInfoLog, GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog)\
 	GLE(void, UseProgram, GLuint program)\
 	GLE(void, GetShaderiv, GLuint shader, GLenum pname, GLint *params)\
+	GLE(void, DeleteProgram, GLuint program)\
 	\
 	GLE(void, EnableVertexAttribArray, GLuint index)\
 	GLE(void, VertexAttribPointer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid * pointer)\
@@ -59,6 +60,14 @@ void load_opengl_extensions() {
 	OPENGL_EXTENSION_LIST
 #undef GLE
 }
+
+typedef struct {
+	GLuint gl_program;
+	char *file_name;
+	//HANDLE file_handle;
+	uint64_t last_write_time;
+	int types;
+} Shader;
 
 // todo: not sure if this interface will work with direct3d
 // todo: malloc? what's my stance on malloc?
@@ -85,7 +94,7 @@ GLuint create_gl_shader(char *source, int len, GLenum type) {
 	return shader;
 }
 
-GLuint shader_from_string(char *vs, char *fs, char *gs) {
+Shader shader_from_string(char *vs, char *fs, char *gs) {
 	vs_error = NULL;
 	fs_error = NULL;
 	gs_error = NULL;
@@ -137,8 +146,12 @@ GLuint shader_from_string(char *vs, char *fs, char *gs) {
 	//if (gs) glAttachShader(program, gshader);
 
 	glLinkProgram(program);
+	Shader result = {0};
+	result.gl_program = program;
+	/*result.file_name = file_name;
+	result.file_handle = file;*/
 
-	return program;
+	return result;
 }
 
 typedef enum {
@@ -161,39 +174,75 @@ GLuint create_gl_shader_file(char *source, int len, GLenum type) {
 	int error_size;
 	glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &error_size);
 	if (error_size) {
-		char *error_out;
-		if (type == GL_VERTEX_SHADER) error_out = vs_error;
-		if (type == GL_FRAGMENT_SHADER) error_out = fs_error;
-		if (type == GL_GEOMETRY_SHADER) error_out = gs_error;
-		error_out = (char*)malloc(error_size);
-		glGetShaderInfoLog(shader, error_size, NULL, error_out);
-		OutputDebugString(error_out);
+		char **error_out;
+		if (type == GL_VERTEX_SHADER) error_out = &vs_error;
+		if (type == GL_FRAGMENT_SHADER) error_out = &fs_error;
+		if (type == GL_GEOMETRY_SHADER) error_out = &gs_error;
+		*error_out = (char*)malloc(error_size);
+		glGetShaderInfoLog(shader, error_size, NULL, *error_out);
+		OutputDebugString(*error_out);
 	}
 	return shader;
 }
 
-GLuint shader_from_file(char *file_name, int shader_types) {
+Shader shader_from_file(char *file_name, int shader_types) {
+	vs_error = NULL;
+	fs_error = NULL;
+	gs_error = NULL;
+
 	HANDLE file = CreateFileA(file_name, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	FILETIME write_time;
+	GetFileTime(file, NULL, NULL, &write_time);
 	int file_size = GetFileSize(file, 0);
 	HANDLE file_mapping = CreateFileMappingA(file, NULL, PAGE_WRITECOPY, 0, 0, 0);
 	char *source = (char*)MapViewOfFileEx(file_mapping, FILE_MAP_COPY, 0, 0, 0, 0);
 	GLuint program = glCreateProgram();
 	if (shader_types & SHADER_VERTEX) {
 		GLuint shader = create_gl_shader_file(source, file_size, GL_VERTEX_SHADER);
-		glAttachShader(program, shader);
+		if (!vs_error) glAttachShader(program, shader);
 	}
 	if (shader_types & SHADER_PIXEL) {
 		GLuint shader = create_gl_shader_file(source, file_size, GL_FRAGMENT_SHADER);
-		glAttachShader(program, shader);
+		if (!fs_error) glAttachShader(program, shader);
 	}
 	if (shader_types & SHADER_GEOMETRY) {
 		GLuint shader = create_gl_shader_file(source, file_size, GL_GEOMETRY_SHADER);
-		glAttachShader(program, shader);
+		if (!gs_error) glAttachShader(program, shader);
 	}
+
+	if (vs_error || fs_error || gs_error) {
+		Shader result = {0};
+		return result;
+	}
+
 	glLinkProgram(program);
-	return program;
+	// todo: detatch and delete shaders
+
+	Shader result = {0};
+	result.gl_program = program;
+	result.file_name = file_name;
+	//result.file_handle = file;
+	result.last_write_time = write_time.dwLowDateTime & (write_time.dwHighDateTime<<32);
+	result.types = shader_types;
+	CloseHandle(file);
+	return result;
 }
 
-void use_shader(GLuint shader) {
-	glUseProgram(shader);
+void use_shader(Shader *shader) {
+	if (shader->file_name) {
+		HANDLE file = CreateFileA(shader->file_name, /*GENERIC_READ*/0, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		FILETIME write_time;
+		GetFileTime(file, NULL, NULL, &write_time);
+		uint64_t time = write_time.dwLowDateTime & (write_time.dwHighDateTime<<32);
+		CloseHandle(file);
+		if (time != shader->last_write_time) {
+			glDeleteProgram(shader->gl_program);
+			*shader = shader_from_file(shader->file_name, shader->types);
+		}
+	}
+	glUseProgram(shader->gl_program);
+}
+
+void no_shader() {
+	glUseProgram(0);
 }
