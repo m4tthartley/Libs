@@ -324,6 +324,14 @@ void mat4_apply_euler(mat4 *m, float3 rotation) {
 	mat4_apply_rotate_z(m, rotation.z);
 }
 
+mat4 mat4_euler_rotation(float3 euler) {
+	mat4 result = mat4_identity();
+	mat4_apply_rotate_x(&result, euler.x);
+	mat4_apply_rotate_y(&result, euler.y);
+	mat4_apply_rotate_z(&result, euler.z);
+	return result;
+}
+
 mat4 euler_to_mat4(float3 euler) {
 	mat4 result = mat4_identity();
 	mat4_apply_euler(&result, euler);
@@ -354,6 +362,77 @@ void float4_apply_perspective(float4 *out, mat4 mat) {
 	out->e[0] /= out->e[3];
 	out->e[1] /= out->e[3];
 	out->e[2] /= out->e[3];
+}
+
+float3 normalize3(float3 v) {
+	float len = length3(v);
+	float3 result = {v.x/len, v.y/len, v.z/len};
+	return result;
+}
+
+float3 cross3(float3 a, float3 b) {
+	float3 result;
+	result.x = a.y*b.z - a.z*b.y;
+	result.y = a.z*b.x - a.x*b.z;
+	result.z = a.x*b.y - a.y*b.x;
+	return normalize3(result);
+}
+
+float dot3(float3 a, float3 b) {
+	return a.x*b.x + a.y*b.y + a.z*b.z;
+}
+
+float3 neg3(float3 v) {
+	float3 result = {-v.x, -v.y, -v.z};
+	return result;
+}
+
+mat4 mat4_camera(float3 position, float3 direction, float3 up) {
+	float3 x = {};
+	float3 y = {};
+	float3 z = {};
+
+	float3 d = sub3(direction, position);
+
+	z = /*neg3*/(normalize3(d));
+	y = up;
+	x = cross3(y, z);
+	y = cross3(z, x);
+	x = normalize3(x);
+	y = normalize3(y);
+
+	mat4 result = {
+		-x.x, y.x, -z.x, 0,
+		-x.y, y.y, -z.y, 0,
+		-x.z, y.z, -z.z, 0,
+		-dot3(x, position), -dot3(y, position), dot3(z, position), 1.0f,
+	};
+	/*mat4 lookat = {
+		x.x, y.x, z.x, 0.0f,
+		x.y, y.y, z.y, 0.0f,
+		x.z, y.z, z.z, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f,
+	};
+	mat4 pos = {
+		1.0f, 0.0f, 0.0f, 1.0f,
+		0.0f, 1.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f, 1.0f,
+		-position.x, -position.y, -position.z, 1.0f,
+	};*/
+	/*mat4 lookat = {
+		x.x, x.y, x.z, 0.0f,
+		y.x, y.y, y.z, 0.0f,
+		z.x, z.y, z.z, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f,
+	};
+	mat4 pos = {
+		1.0f, 0.0f, 0.0f, -position.x,
+		0.0f, 1.0f, 0.0f, -position.y,
+		0.0f, 0.0f, 1.0f, -position.z,
+		0.0f, 0.0f, 0.0f, 1.0f,
+	};*/
+
+	return result;//mat4_mul(lookat, pos);
 }
 
 quaternion quaternion_identity() {

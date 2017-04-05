@@ -443,9 +443,9 @@ wglChoosePixelFormatARB_proc *wglChoosePixelFormatARB;
 void InitOpenglVideo (Rain *rain) {
 	PIXELFORMATDESCRIPTOR pixelFormat = {0};
 
-	//_globalState = os;
-	freopen("stdout.txt", "a", stdout);
-	freopen("stderr.txt", "a", stderr);
+	// note: this sets theses files as the std output location
+	/*freopen("stdout.txt", "a", stdout);
+	freopen("stderr.txt", "a", stderr);*/
 
 	if (!rain_create_window(rain)) goto error;
 

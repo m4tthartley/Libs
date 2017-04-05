@@ -45,6 +45,9 @@ typedef char GLchar;
 	\
 	GLE(GLint, GetUniformLocation, GLuint program, const GLchar *name)\
 	GLE(void, UniformMatrix4fv, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value)\
+	GLE(void, Uniform1f, GLint location, GLfloat v0)\
+	GLE(void, Uniform2f, GLint location, GLfloat v0, GLfloat v1)\
+	GLE(void, Uniform3f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2)\
 	GLE(void, Uniform4f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3)\
 	GLE(GLint, GetAttribLocation, GLuint program, const GLchar *name)\
 
@@ -210,6 +213,8 @@ Shader shader_from_file(char *file_name, int shader_types) {
 		if (!gs_error) glAttachShader(program, shader);
 	}
 
+	CloseHandle(file);
+
 	if (vs_error || fs_error || gs_error) {
 		Shader result = {0};
 		return result;
@@ -224,7 +229,6 @@ Shader shader_from_file(char *file_name, int shader_types) {
 	//result.file_handle = file;
 	result.last_write_time = write_time.dwLowDateTime & (write_time.dwHighDateTime<<32);
 	result.types = shader_types;
-	CloseHandle(file);
 	return result;
 }
 
