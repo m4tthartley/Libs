@@ -388,9 +388,9 @@ float3 neg3(float3 v) {
 }
 
 mat4 mat4_camera(float3 position, float3 direction, float3 up) {
-	float3 x = {};
-	float3 y = {};
-	float3 z = {};
+	float3 x = {0};
+	float3 y = {0};
+	float3 z = {0};
 
 	float3 d = sub3(direction, position);
 

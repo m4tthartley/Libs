@@ -22,6 +22,7 @@ typedef char GLchar;
 #define GL_INFO_LOG_LENGTH                0x8B84
 #define GL_MULTISAMPLE                    0x809D
 #define GL_MULTISAMPLE_ARB                0x809D
+#define GL_RGB32F                         0x8815
 
 //typedef unsigned int GLuint;
 //typedef int GLint;
@@ -49,6 +50,7 @@ typedef char GLchar;
 	GLE(void, Uniform2f, GLint location, GLfloat v0, GLfloat v1)\
 	GLE(void, Uniform3f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2)\
 	GLE(void, Uniform4f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3)\
+	GLE(void, Uniform1i, GLint location, int i)\
 	GLE(GLint, GetAttribLocation, GLuint program, const GLchar *name)\
 
 
@@ -192,9 +194,13 @@ Shader shader_from_file(char *file_name, int shader_types) {
 	vs_error = NULL;
 	fs_error = NULL;
 	gs_error = NULL;
+	Shader result = {0};
 
+	FILETIME write_time = {0};
 	HANDLE file = CreateFileA(file_name, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	FILETIME write_time;
+	if (file == INVALID_HANDLE_VALUE) {
+		goto end;
+	}
 	GetFileTime(file, NULL, NULL, &write_time);
 	int file_size = GetFileSize(file, 0);
 	HANDLE file_mapping = CreateFileMappingA(file, NULL, PAGE_WRITECOPY, 0, 0, 0);
@@ -216,14 +222,13 @@ Shader shader_from_file(char *file_name, int shader_types) {
 	CloseHandle(file);
 
 	if (vs_error || fs_error || gs_error) {
-		Shader result = {0};
-		return result;
+		goto end;
 	}
 
 	glLinkProgram(program);
 	// todo: detatch and delete shaders
 
-	Shader result = {0};
+end:
 	result.gl_program = program;
 	result.file_name = file_name;
 	//result.file_handle = file;
@@ -235,13 +240,17 @@ Shader shader_from_file(char *file_name, int shader_types) {
 void use_shader(Shader *shader) {
 	if (shader->file_name) {
 		HANDLE file = CreateFileA(shader->file_name, /*GENERIC_READ*/0, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-		FILETIME write_time;
-		GetFileTime(file, NULL, NULL, &write_time);
-		uint64_t time = write_time.dwLowDateTime & (write_time.dwHighDateTime<<32);
-		CloseHandle(file);
-		if (time != shader->last_write_time) {
-			glDeleteProgram(shader->gl_program);
-			*shader = shader_from_file(shader->file_name, shader->types);
+		if (file != INVALID_HANDLE_VALUE) {
+			FILETIME write_time;
+			GetFileTime(file, NULL, NULL, &write_time);
+			uint64_t time = write_time.dwLowDateTime & (write_time.dwHighDateTime<<32);
+			CloseHandle(file);
+			if (time != shader->last_write_time) {
+				glDeleteProgram(shader->gl_program);
+				*shader = shader_from_file(shader->file_name, shader->types);
+			}
+		} else {
+			OutputDebugString("failed to open shader file\n");
 		}
 	}
 	glUseProgram(shader->gl_program);
