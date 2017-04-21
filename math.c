@@ -163,6 +163,22 @@ float3 sub3(float3 a, float3 b) {
 	return result;
 }
 
+float2 div2(float2 a, float2 b) {
+	float2 result = {
+		a.x / b.x,
+		a.y / b.y,
+	};
+	return result;
+}
+
+float2 div2f(float2 a, float b) {
+	float2 result = {
+		a.x / b,
+		a.y / b,
+	};
+	return result;
+}
+
 float3 div3(float3 a, float3 b) {
 	float3 result = {
 		a.x / b.x,
@@ -181,9 +197,45 @@ float3 div3f(float3 a, float b) {
 	return result;
 }
 
+float2 mul2(float2 a, float2 b) {
+	float2 result = {
+		a.x * b.x,
+		a.y * b.y,
+	};
+	return result;
+}
+
+float2 mul2f(float2 a, float b) {
+	float2 result = {
+		a.x * b,
+		a.y * b,
+	};
+	return result;
+}
+
+float3 mul3(float3 a, float3 b) {
+	float3 result = {
+		a.x * b.x,
+		a.y * b.y,
+		a.z * b.z,
+	};
+	return result;
+}
+
+float3 mul3f(float3 a, float b) {
+	float3 result = {
+		a.x * b,
+		a.y * b,
+		a.z * b,
+	};
+	return result;
+}
+
 float length2(float2 v) {
 	float result = sqrtf(v.x*v.x + v.y*v.y);
+#ifdef _WIN32
 	if (isnan(result)) __debugbreak();
+#endif
 	return result;
 }
 
