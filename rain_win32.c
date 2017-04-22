@@ -145,6 +145,8 @@ typedef struct {
 	int software_video_height;
 	int *video_memory;
 
+	bool sound_disabled;
+
 	struct {
 		bool keys[256];
 		bool keys_last[256];
@@ -700,7 +702,7 @@ LPDIRECTSOUND dsound;
 LPDIRECTSOUNDBUFFER primaryBuffer;
 LPDIRECTSOUNDBUFFER secondaryBuffer;
 CRITICAL_SECTION playingSoundsLock;
-void InitSound (OSState *os) {
+void InitSound (Rain *rain) {
 	WAVEFORMATEX wave = {0};
 	DSBUFFERDESC desc = {0};
 	DSBUFFERDESC desc2 = {0};
@@ -735,7 +737,7 @@ void InitSound (OSState *os) {
 	wave.nBlockAlign = 4;
 	wave.nAvgBytesPerSec = SOUND_SAMPLES_PER_SEC * 4;
 
-	if (!SUCCEEDED(IDirectSound_SetCooperativeLevel(dsound, os->_window, DSSCL_PRIORITY))) {
+	if (!SUCCEEDED(IDirectSound_SetCooperativeLevel(dsound, rain->win32.window, DSSCL_PRIORITY))) {
 		PrintErr("IDirectSound_SetCooperativeLevel error\n");
 		goto error;
 	}
@@ -768,8 +770,8 @@ void InitSound (OSState *os) {
 
 error:
 	PrintErr("Failed to initialize DirectSound\n");
-	MessageBox(os->_window, "There was an error initializing audio, continuing without sound", NULL, MB_OK);
-	os->soundDisabled = true;
+	MessageBox(rain->win32.window, "There was an error initializing audio, continuing without sound", NULL, MB_OK);
+	rain->sound_disabled = true;
 }
 
 int lastChunkWritten = 0;
@@ -800,7 +802,7 @@ int playingSoundCount = 0;
 void SoundPlay (Sound *sound, int flags) {
 	EnterCriticalSection(&playingSoundsLock);
 	if (sound->channels == 2 && sound->bitsPerSample == 16) {
-		playingSounds[playingSoundCount].sound = sound;
+		playingSounds[playingSoundCount].sound = sound; // todo: setting this as a pointer is bad
 		playingSounds[playingSoundCount].numSamples = sound->size/4;
 		playingSounds[playingSoundCount].cursor = 0;
 		playingSounds[playingSoundCount].fadeSpeed = 0.0f;
@@ -900,8 +902,8 @@ float volume = 0.25f;
 int64 oldTime = 0;
 SoundSample visualSamples[SOUND_SAMPLES_PER_SEC];
 int visualCursor = 0;
-void UpdateSound (OSState *os) {
-	if (os->soundDisabled) return;
+void UpdateSound (Rain *rain) {
+	if (rain->sound_disabled) return;
 
 	int writePos = GetSoundDeviceWriteCursor();
 
