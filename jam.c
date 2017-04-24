@@ -9,8 +9,8 @@ GLuint load_image(char *file) {
 	GLuint tex;
 	int width;
 	int height;
-	int components;
-	float *image_data = stbi_load(file, &width, &height, &components, 0);
+	int components = 0;
+	uint8 *image_data = stbi_load(file, &width, &height, &components, 0);
 	glGenTextures(1, &tex);
 	glBindTexture(GL_TEXTURE_2D, tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);

@@ -147,6 +147,10 @@ typedef struct {
 
 	bool sound_disabled;
 
+	double dt; // Seconds
+	double dt60; // Out of 60th of a second
+	int64 old_time;
+
 	struct {
 		bool keys[256];
 		bool keys_last[256];
@@ -589,6 +593,8 @@ void rain_init(Rain *rain) {
 	}
 
 	SetWindowLongPtr(rain->win32.window, GWLP_USERDATA, (LONG)rain);
+
+	rain->old_time = GetTime();
 }
 
 void rain_update(Rain *rain) {
@@ -605,6 +611,11 @@ void rain_update(Rain *rain) {
 	}
 
 	PollEvents(rain);
+
+	int64 time = GetTime();
+	rain->dt = ConvertToSeconds(time - rain->old_time);
+	rain->dt60 = rain->dt*60.0;
+	rain->old_time = time;
 }
 
 #define main_entry int CALLBACK WinMain (HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR cmdLine, int cmdShow)

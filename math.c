@@ -7,6 +7,17 @@
 #ifndef _GIANTJELLY_MATH_
 #define _GIANTJELLY_MATH_
 
+#define PI 3.14159265359f
+#define PI2 (3.14159265359f*2.0f)
+
+float todeg(float rad) {
+	return rad/PI * 180.0f;
+}
+
+float torad(float deg) {
+	return deg/180.0f * PI;
+}
+
 typedef union {
 	struct {
 		int x;
@@ -100,9 +111,6 @@ typedef union {
 } mat4;
 
 typedef float4 quaternion;
-
-#define PI 3.14159265359f
-#define PI2 (3.14159265359f*2.0f)
 
 int2 make_int2(int x, int y) {
 	int2 result = {x, y};
@@ -231,6 +239,21 @@ float3 mul3f(float3 a, float b) {
 	return result;
 }
 
+float2 neg2(float2 v) {
+	float2 result = {-v.x, -v.y};
+	return result;
+}
+
+float3 neg3(float3 v) {
+	float3 result = {-v.x, -v.y, -v.z};
+	return result;
+}
+
+float4 neg4(float4 v) {
+	float4 result = {-v.x, -v.y, -v.z, -v.w};
+	return result;
+}
+
 float length2(float2 v) {
 	float result = sqrtf(v.x*v.x + v.y*v.y);
 #ifdef _WIN32
@@ -244,13 +267,27 @@ float length3(float3 v) {
 	return result;
 }
 
+float length4(float4 v) {
+	float result = sqrtf(v.x*v.x + v.y*v.y + v.z*v.z + v.w*v.w);
+	return result;
+}
+
 float dist2(float2 a, float2 b) {
 	float2 f = {a.x-b.x, a.y-b.y};
 	float result = sqrtf(f.x*f.x + f.y*f.y);
 	return result;
 }
 
-float3 normalize(float3 v) {
+float2 normalize2(float2 v) {
+	float len = length2(v);
+	float2 result = {
+		v.x / len,
+		v.y / len,
+	};
+	return result;
+}
+
+float3 normalize3(float3 v) {
 	float len = length3(v);
 	float3 result = {
 		v.x / len,
@@ -258,6 +295,65 @@ float3 normalize(float3 v) {
 		v.z / len,
 	};
 	return result;
+}
+
+float4 normalize4(float4 v) {
+	float len = length4(v);
+	float4 result = {
+		v.x / len,
+		v.y / len,
+		v.z / len,
+		v.w / len,
+	};
+	return result;
+}
+
+//float3 normalize3(float3 v) {
+//	float len = length3(v);
+//	float3 result = {v.x/len, v.y/len, v.z/len};
+//	return result;
+//}
+
+float lerp(float a, float b, float t) {
+	return a + (b-a)*t;
+}
+
+float2 lerp2(float2 a, float2 b, float t) {
+	return make_float2(lerp(a.x, b.x, t),
+					   lerp(a.y, b.y, t));
+}
+
+float3 lerp3(float3 a, float3 b, float t) {
+	return make_float3(lerp(a.x, b.x, t),
+					   lerp(a.y, b.y, t),
+					   lerp(a.z, b.z, t));
+}
+
+float4 lerp4(float4 a, float4 b, float t) {
+	return make_float4(lerp(a.x, b.x, t),
+					   lerp(a.y, b.y, t),
+					   lerp(a.z, b.z, t),
+					   lerp(a.w, b.w, t));
+}
+
+float dot2(float2 a, float2 b) {
+	return a.x*b.x + a.y*b.y;
+}
+
+float dot3(float3 a, float3 b) {
+	return a.x*b.x + a.y*b.y + a.z*b.z;
+}
+
+float dot4(float4 a, float4 b) {
+	return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
+}
+
+float3 cross3(float3 a, float3 b) {
+	float3 result;
+	result.x = a.y*b.z - a.z*b.y;
+	result.y = a.z*b.x - a.x*b.z;
+	result.z = a.x*b.y - a.y*b.x;
+	return normalize3(result);
 }
 
 mat4 mat4_identity() {
@@ -414,29 +510,6 @@ void float4_apply_perspective(float4 *out, mat4 mat) {
 	out->e[0] /= out->e[3];
 	out->e[1] /= out->e[3];
 	out->e[2] /= out->e[3];
-}
-
-float3 normalize3(float3 v) {
-	float len = length3(v);
-	float3 result = {v.x/len, v.y/len, v.z/len};
-	return result;
-}
-
-float3 cross3(float3 a, float3 b) {
-	float3 result;
-	result.x = a.y*b.z - a.z*b.y;
-	result.y = a.z*b.x - a.x*b.z;
-	result.z = a.x*b.y - a.y*b.x;
-	return normalize3(result);
-}
-
-float dot3(float3 a, float3 b) {
-	return a.x*b.x + a.y*b.y + a.z*b.z;
-}
-
-float3 neg3(float3 v) {
-	float3 result = {-v.x, -v.y, -v.z};
-	return result;
 }
 
 mat4 mat4_camera(float3 position, float3 direction, float3 up) {
