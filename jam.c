@@ -5,6 +5,13 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "w:/lib/stb_image.h"
+
+typedef struct {
+	int width;
+	int height;
+	GLuint id;
+} Texture;
+
 GLuint load_image(char *file) {
 	GLuint tex;
 	int width;
@@ -72,9 +79,9 @@ void init();
 void update();
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd) {
-	init();
 	rain_init(&rain);
 	InitSound(&rain);
+	init();
 	while (!rain.quit) {
 		rain_update(&rain);
 		UpdateSound(&rain);

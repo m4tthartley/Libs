@@ -26,7 +26,7 @@ void debug_print(char *str, ...) {
 }
 
 typedef enum {
-	KEYBOARD_A = 'A',
+	/*KEYBOARD_A = 'A',
 	KEYBOARD_B = 'B',
 	KEYBOARD_C = 'C',
 	KEYBOARD_D = 'D',
@@ -51,27 +51,20 @@ typedef enum {
 	KEYBOARD_W = 'W',
 	KEYBOARD_X = 'X',
 	KEYBOARD_Y = 'Y',
-	KEYBOARD_Z = 'Z',
-
-	KEYBOARD_1 = '1',
-	KEYBOARD_2 = '2',
-	KEYBOARD_3 = '3',
-	KEYBOARD_4 = '4',
-	KEYBOARD_5 = '5',
-	KEYBOARD_6 = '6',
-	KEYBOARD_7 = '7',
-	KEYBOARD_8 = '8',
-	KEYBOARD_9 = '9',
-	KEYBOARD_0 = '0',
+	KEYBOARD_Z = 'Z',*/
 
 	KEYBOARD_LEFT = VK_LEFT,
 	KEYBOARD_RIGHT = VK_RIGHT,
 	KEYBOARD_UP = VK_UP,
 	KEYBOARD_DOWN = VK_DOWN,
 
+	KEYBOARD_LCTRL = VK_LCONTROL,
+	KEYBOARD_RCTRL = VK_RCONTROL,
 	KEYBOARD_CTRL = VK_CONTROL,
 	KEYBOARD_LSHIFT = VK_LSHIFT,
 	KEYBOARD_RSHIFT = VK_RSHIFT,
+	KEYBOARD_SHIFT = VK_SHIFT,
+
 	KEYBOARD_ALT = VK_MENU,
 	KEYBOARD_CAPS = VK_CAPITAL,
 	KEYBOARD_TAB = VK_TAB,
@@ -97,73 +90,38 @@ typedef enum {
 LARGE_INTEGER _globalPerformanceFrequency = {0};
 
 typedef struct {
-	HWND _window;
+	HWND window;
 	HDC hdc;
-	BITMAPINFO bitmapInfo;
-	void *videoMemory;
-	int windowWidth;
-	int windowHeight;
-	int backBufferWidth;
-	int backBufferHeight;
-	bool windowOpen;
-	struct {
-		bool keys[256];
-		bool keysLast[256];
-		struct {
-			int x;
-			int y;
-		} mouse;
-	} input;
-	bool soundDisabled;
-} OSState;
+	BITMAPINFO bitmap_info;
+} RainWin32;
+
+RainWin32 _win32;
+
+//typedef struct {
+//	HWND _window;
+//	HDC hdc;
+//	BITMAPINFO bitmapInfo;
+//	void *videoMemory;
+//	int windowWidth;
+//	int windowHeight;
+//	int backBufferWidth;
+//	int backBufferHeight;
+//	bool windowOpen;
+//	struct {
+//		bool keys[256];
+//		bool keysLast[256];
+//		struct {
+//			int x;
+//			int y;
+//		} mouse;
+//	} input;
+//	bool soundDisabled;
+//} OSState;
 
 //typedef enum {
 //	VIDEO_MODE_SOFTWARE,
 //	VIDEO_MODE_HARDWARE,
 //} VideoMode;
-
-typedef struct {
-	HWND window;
-	HDC hdc;
-	BITMAPINFO bitmap_info;
-} RainWin32;
-typedef struct {
-	bool down;
-	bool pressed;
-	bool released;
-} digital_button;
-typedef struct {
-	RainWin32 win32;
-
-	bool quit;
-	int window_width;
-	int window_height;
-	char *window_title;
-
-	bool software_video;
-	int software_video_width;
-	int software_video_height;
-	int *video_memory;
-
-	bool sound_disabled;
-
-	double dt; // Seconds
-	double dt60; // Out of 60th of a second
-	int64 old_time;
-
-	struct {
-		bool keys[256];
-		bool keys_last[256];
-	} input;
-	struct {
-		int2 position;
-		int2 position_delta;
-		digital_button left;
-		digital_button right;
-		digital_button middle;
-		int wheel_delta;
-	} mouse;
-} Rain;
 
 void update_digital_button(digital_button *button, bool new_state) {
 	button->pressed = new_state && !button->down;
@@ -243,11 +201,17 @@ LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wparam, LPARAM 
 void PollEvents (Rain *rain) {
 	// memset(&os->input.
 	//os->input.keysLast[Message.wParam] = os->input.keys[Message.wParam];
-	memcpy(rain->input.keys_last, rain->input.keys, sizeof(rain->input.keys));
+	//memcpy(rain->input.keys_last, rain->input.keys, sizeof(rain->input.keys));
+
+	char keyboard[256] = {0};
+	GetKeyboardState(keyboard);
+	for (int i = 0; i < 256; ++i) {
+		update_digital_button(&rain->keys[i], keyboard[i]>>7);
+	}
 
 	POINT mouse;
 	GetCursorPos(&mouse);
-	ScreenToClient(rain->win32.window, &mouse);
+	ScreenToClient(_win32.window, &mouse);
 	rain->mouse.position.x = mouse.x;
 	rain->mouse.position.y = mouse.y;
 
@@ -265,6 +229,7 @@ void PollEvents (Rain *rain) {
 	MSG Message;
 	while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE)) {
 		switch (Message.message) {
+#if 0
 			case WM_SYSKEYDOWN:
 			case WM_KEYDOWN: {
 				switch (Message.wParam) {
@@ -283,6 +248,7 @@ void PollEvents (Rain *rain) {
 			case WM_KEYUP: {
 				rain->input.keys[Message.wParam] = false;
 			} break;
+#endif
 			default: {
 				TranslateMessage(&Message);
 				DispatchMessageA(&Message);
@@ -292,13 +258,13 @@ void PollEvents (Rain *rain) {
 	}
 }
 
-bool KeyDown (OSState *os, KeyID key) {
-	return os->input.keys[key];
-}
-
-bool KeyPressed (OSState *os, KeyID key) {
-	return os->input.keys[key] && !os->input.keysLast[key];
-}
+//bool KeyDown (OSState *os, KeyID key) {
+//	return os->input.keys[key];
+//}
+//
+//bool KeyPressed (OSState *os, KeyID key) {
+//	return os->input.keys[key] && !os->input.keysLast[key];
+//}
 
 bool rain_create_window(Rain *rain) {
 	WNDCLASS windowClass = {0};
@@ -319,17 +285,17 @@ bool rain_create_window(Rain *rain) {
 
 	if (RegisterClassA(&windowClass)) {
 		if (!rain->window_title) rain->window_title = "Rain";
-		rain->win32.window = CreateWindowExA(0, windowClass.lpszClassName, rain->window_title, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+		_win32.window = CreateWindowExA(0, windowClass.lpszClassName, rain->window_title, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
 			CW_USEDEFAULT, CW_USEDEFAULT,
 			windowRect.right - windowRect.left,
 			windowRect.bottom - windowRect.top,
 			0, 0, hInstance, 0);
 
-		if (rain->win32.window) {
+		if (_win32.window) {
 			rain->quit = false;
-			UpdateWindow(rain->win32.window);
+			UpdateWindow(_win32.window);
 
-			rain->win32.hdc = GetDC(rain->win32.window);
+			_win32.hdc = GetDC(_win32.window);
 		} else {
 			PrintErr("Error while creating window\n");
 			//goto error;
@@ -346,7 +312,7 @@ bool rain_create_window(Rain *rain) {
 	mouse_raw_input.usUsagePage = 1;
 	mouse_raw_input.usUsage = 2;
 	mouse_raw_input.dwFlags = 0;
-	mouse_raw_input.hwndTarget = rain->win32.window;
+	mouse_raw_input.hwndTarget = _win32.window;
 	if (!RegisterRawInputDevices(&mouse_raw_input, 1, sizeof(mouse_raw_input))) {
 		debug_print("failed to register raw input mouse\n");
 		__debugbreak();
@@ -394,17 +360,17 @@ void InitSoftwareVideo (Rain *rain) {
 		rain->software_video_height = rain->window_height;
 	}
 
-	ZeroStruct(rain->win32.bitmap_info);
-	rain->win32.bitmap_info.bmiHeader.biSize = sizeof(rain->win32.bitmap_info.bmiHeader);
-	/*rain->win32.backBufferWidth = backBufferWidth;
-	rain->win32.backBufferHeight = backBufferHeight;*/
-	rain->win32.bitmap_info.bmiHeader.biWidth = rain->software_video_width;
-	rain->win32.bitmap_info.bmiHeader.biHeight = rain->software_video_height;
-	rain->win32.bitmap_info.bmiHeader.biPlanes = 1;
-	rain->win32.bitmap_info.bmiHeader.biBitCount = 32;
-	rain->win32.bitmap_info.bmiHeader.biCompression = BI_RGB;
+	ZeroStruct(_win32.bitmap_info);
+	_win32.bitmap_info.bmiHeader.biSize = sizeof(_win32.bitmap_info.bmiHeader);
+	/*_win32.backBufferWidth = backBufferWidth;
+	_win32.backBufferHeight = backBufferHeight;*/
+	_win32.bitmap_info.bmiHeader.biWidth = rain->software_video_width;
+	_win32.bitmap_info.bmiHeader.biHeight = rain->software_video_height;
+	_win32.bitmap_info.bmiHeader.biPlanes = 1;
+	_win32.bitmap_info.bmiHeader.biBitCount = 32;
+	_win32.bitmap_info.bmiHeader.biCompression = BI_RGB;
 
-	HBITMAP hBitmap = CreateDIBSection(rain->win32.hdc, &rain->win32.bitmap_info, DIB_RGB_COLORS, (void**)&rain->video_memory, 0, 0);
+	HBITMAP hBitmap = CreateDIBSection(_win32.hdc, &_win32.bitmap_info, DIB_RGB_COLORS, (void**)&rain->video_memory, 0, 0);
 
 	/*	} else {
 			PrintErr("Error while creating window\n");
@@ -417,7 +383,7 @@ void InitSoftwareVideo (Rain *rain) {
 
 	return;
 error:
-	MessageBox(rain->win32.window, "There was an error initializing software video", NULL, MB_OK);
+	MessageBox(_win32.window, "There was an error initializing software video", NULL, MB_OK);
 	exit(1);
 }
 
@@ -463,24 +429,24 @@ void InitOpenglVideo (Rain *rain) {
 	pixelFormat.cAlphaBits = 8;
 	pixelFormat.iLayerType = PFD_MAIN_PLANE;
 
-	int suggestedIndex = ChoosePixelFormat(rain->win32.hdc, &pixelFormat);
+	int suggestedIndex = ChoosePixelFormat(_win32.hdc, &pixelFormat);
 	if (!suggestedIndex) {
 		PrintErr("ChoosePixelFormat failed\n");
 		goto error;
 	}
 	PIXELFORMATDESCRIPTOR suggested;
-	DescribePixelFormat(rain->win32.hdc, suggestedIndex, sizeof(PIXELFORMATDESCRIPTOR), &suggested);
-	if (!SetPixelFormat(rain->win32.hdc, suggestedIndex, &suggested)) {
+	DescribePixelFormat(_win32.hdc, suggestedIndex, sizeof(PIXELFORMATDESCRIPTOR), &suggested);
+	if (!SetPixelFormat(_win32.hdc, suggestedIndex, &suggested)) {
 		PrintErr("SetPixelFormat failed\n");
 		goto error;
 	}
 
-	HGLRC glContext = wglCreateContext(rain->win32.hdc);
+	HGLRC glContext = wglCreateContext(_win32.hdc);
 	if (!glContext) {
 		PrintErr("wglCreateContext failed\n");
 		goto error;
 	}
-	if (!wglMakeCurrent(rain->win32.hdc, glContext)) {
+	if (!wglMakeCurrent(_win32.hdc, glContext)) {
 		PrintErr("wglMakeCurrent failed\n");
 		goto error;
 	}
@@ -505,7 +471,7 @@ void InitOpenglVideo (Rain *rain) {
 	};
 	int format;
 	uint num_formats;
-	wglChoosePixelFormatARB(rain->win32.hdc, format_attribs, NULL, 1, &format, &num_formats);
+	wglChoosePixelFormatARB(_win32.hdc, format_attribs, NULL, 1, &format, &num_formats);
 
 	int attribs[] = {
 		WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
@@ -514,13 +480,13 @@ void InitOpenglVideo (Rain *rain) {
 		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
 		0
 	};
-	HGLRC context = wglCreateContextAttribsARB(rain->win32.hdc, 0, attribs);
-	wglMakeCurrent(rain->win32.hdc, context);
+	HGLRC context = wglCreateContextAttribsARB(_win32.hdc, 0, attribs);
+	wglMakeCurrent(_win32.hdc, context);
 #endif
 
 	return;
 error:
-	MessageBox(rain->win32.window, "There was an error initializing OpenGL video", NULL, MB_OK);
+	MessageBox(_win32.window, "There was an error initializing OpenGL video", NULL, MB_OK);
 	exit(1);
 }
 
@@ -543,12 +509,12 @@ typedef enum {
 
 #define rgba_to_argb(r, g, b, a) (((a&0xFF)<<24) | ((r&0xFF)<<16) | ((g&0xFF)<<8) | b&0xFF)
 
-void DisplaySoftwareGraphics (OSState *os, void *data, SoftwarePixelFormat format, int numComponents) {
-	unsigned int *pixels = (unsigned int*)os->videoMemory;
+void DisplaySoftwareGraphics (Rain *rain, void *data, SoftwarePixelFormat format, int numComponents) {
+	unsigned int *pixels = (unsigned int*)rain->video_memory;
 
 	if (format == PIXEL_FORMAT_FLOAT) {
 		float *video = (float*)data;
-		for (int i = 0; i < os->backBufferWidth*os->backBufferHeight; ++i) {
+		for (int i = 0; i < rain->software_video_width*rain->software_video_height; ++i) {
 			float *v = video + (i*numComponents);
 			int components = numComponents >= 4 ? numComponents : 4;
 			uint8 c[4] = {0};
@@ -561,7 +527,7 @@ void DisplaySoftwareGraphics (OSState *os, void *data, SoftwarePixelFormat forma
 		}
 	} else if (format == PIXEL_FORMAT_UBYTE) {
 		uint8 *video = (uint8*)data;
-		for (int i = 0; i < os->backBufferWidth*os->backBufferHeight; ++i) {
+		for (int i = 0; i < rain->software_video_width*rain->software_video_height; ++i) {
 			uint8 *v = video + (i*numComponents);
 			int components = numComponents >= 4 ? numComponents : 4;
 			uint8 c[4] = {0};
@@ -573,12 +539,12 @@ void DisplaySoftwareGraphics (OSState *os, void *data, SoftwarePixelFormat forma
 			// aarrggbb
 		}
 	}
-	StretchDIBits(os->hdc, 0, 0, os->windowWidth, os->windowHeight, 0, 0, os->backBufferWidth, os->backBufferHeight, os->videoMemory, &os->bitmapInfo, DIB_RGB_COLORS, SRCCOPY);
+	StretchDIBits(_win32.hdc, 0, 0, rain->window_width, rain->window_height, 0, 0, rain->software_video_width, rain->software_video_height, rain->video_memory, &_win32.bitmap_info, DIB_RGB_COLORS, SRCCOPY);
 }
 
-void FinishVideo (OSState *os) {
-	SwapBuffers(os->hdc);
-}
+//void FinishVideo (OSState *os) {
+//	SwapBuffers(os->hdc);
+//}
 
 void rain_init(Rain *rain) {
 	if (!rain->window_width || !rain->window_height) {
@@ -592,7 +558,7 @@ void rain_init(Rain *rain) {
 		InitOpenglVideo(rain);
 	}
 
-	SetWindowLongPtr(rain->win32.window, GWLP_USERDATA, (LONG)rain);
+	SetWindowLongPtr(_win32.window, GWLP_USERDATA, (LONG)rain);
 
 	rain->old_time = GetTime();
 }
@@ -600,13 +566,13 @@ void rain_init(Rain *rain) {
 void rain_update(Rain *rain) {
 	if (rain->software_video) {
 		//InitSoftwareVideo(rain);
-		StretchDIBits(rain->win32.hdc, 0, 0,
+		StretchDIBits(_win32.hdc, 0, 0,
 					  rain->window_width, rain->window_height,
 					  0, 0,
 					  rain->software_video_width, rain->software_video_height,
-					  rain->video_memory, &rain->win32.bitmap_info, DIB_RGB_COLORS, SRCCOPY);
+					  rain->video_memory, &_win32.bitmap_info, DIB_RGB_COLORS, SRCCOPY);
 	} else {
-		SwapBuffers(rain->win32.hdc); // todo: if this is meant for the top of the loop
+		SwapBuffers(_win32.hdc); // todo: if this is meant for the top of the loop
 									  // then don't swap the first time
 	}
 
@@ -748,7 +714,7 @@ void InitSound (Rain *rain) {
 	wave.nBlockAlign = 4;
 	wave.nAvgBytesPerSec = SOUND_SAMPLES_PER_SEC * 4;
 
-	if (!SUCCEEDED(IDirectSound_SetCooperativeLevel(dsound, rain->win32.window, DSSCL_PRIORITY))) {
+	if (!SUCCEEDED(IDirectSound_SetCooperativeLevel(dsound, _win32.window, DSSCL_PRIORITY))) {
 		PrintErr("IDirectSound_SetCooperativeLevel error\n");
 		goto error;
 	}
@@ -781,7 +747,7 @@ void InitSound (Rain *rain) {
 
 error:
 	PrintErr("Failed to initialize DirectSound\n");
-	MessageBox(rain->win32.window, "There was an error initializing audio, continuing without sound", NULL, MB_OK);
+	MessageBox(_win32.window, "There was an error initializing audio, continuing without sound", NULL, MB_OK);
 	rain->sound_disabled = true;
 }
 

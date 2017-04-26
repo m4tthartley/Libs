@@ -145,11 +145,28 @@ float2 add2(float2 a, float2 b) {
 	return result;
 }
 
+float2 add2f(float2 a, float b) {
+	float2 result = {
+		a.x + b,
+		a.y + b,
+	};
+	return result;
+}
+
 float3 add3(float3 a, float3 b) {
 	float3 result = {
 		a.x + b.x,
 		a.y + b.y,
 		a.z + b.z,
+	};
+	return result;
+}
+
+float3 add3f(float3 a, float b) {
+	float3 result = {
+		a.x + b,
+		a.y + b,
+		a.z + b,
 	};
 	return result;
 }
