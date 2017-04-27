@@ -331,6 +331,18 @@ float4 normalize4(float4 v) {
 //	return result;
 //}
 
+float min(float a, float b) {
+	float r = a;
+	if (b < a) r = b;
+	return r;
+}
+
+float max(float a, float b) {
+	float r = a;
+	if (b > a) r = b;
+	return r;
+}
+
 float lerp(float a, float b, float t) {
 	return a + (b-a)*t;
 }
