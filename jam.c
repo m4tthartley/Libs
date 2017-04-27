@@ -1,10 +1,15 @@
 
-#include "w:/libs/rain.c"
-#include <GL/gl.h>
-#pragma comment(lib, "opengl32.lib")
+#include "rain.c"
+
+#ifdef _WIN32
+#	include <GL/gl.h>
+#	pragma comment(lib, "opengl32.lib")
+#elif __APPLE__
+#	include <OpenGL/gl.h>
+#endif
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "w:/lib/stb_image.h"
+#include "stb_image.h"
 
 typedef struct {
 	int width;
@@ -78,7 +83,11 @@ Rain rain = {0};
 void init();
 void update();
 
+#ifdef _WIN32
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd) {
+#elif __APPLE__
+int main() {
+#endif
 	rain_init(&rain);
 	InitSound(&rain);
 	init();

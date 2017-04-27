@@ -11,9 +11,6 @@
 #include <GL/gl.h>
 #include <dsound.h>
 
-#include <stdio.h>
-#include <math.h>
-
 void debug_print(char *str, ...) {
 	va_list args;
 	va_start(args, str);
@@ -133,12 +130,6 @@ RainWin32 _win32;
 //	VIDEO_MODE_SOFTWARE,
 //	VIDEO_MODE_HARDWARE,
 //} VideoMode;
-
-void update_digital_button(digital_button *button, bool new_state) {
-	button->pressed = new_state && !button->down;
-	button->released = !new_state && button->down;
-	button->down = new_state;
-}
 
 #define PrintOut(...) fprintf(stdout, __VA_ARGS__);
 #define PrintErr(...) fprintf(stderr, __VA_ARGS__);
@@ -602,78 +593,6 @@ void rain_update(Rain *rain) {
 //}
 
 // Audio
-
-#pragma pack(push, 1)
-typedef struct {
-	char ChunkId[4];
-	uint ChunkSize;
-	char WaveId[4];
-} WavHeader;
-typedef struct {
-	char id[4];
-	uint size;
-	uint16 formatTag;
-	uint16 channels;
-	uint samplesPerSec;
-	uint bytesPerSec;
-	uint16 blockAlign;
-	uint16 bitsPerSample;
-	uint16 cbSize;
-	int16 validBitsPerSample;
-	int channelMask;
-	char subFormat[16];
-} WavFormatChunk;
-typedef struct {
-	char id[4];
-	uint size;
-	void *data;
-	char padByte;
-} WavDataChunk;
-/*typedef struct {
-	WavHeader header;
-	WavFormatChunk format;
-	int16 *data;
-	uint dataSize;
-	file_data file;
-} WavData;*/
-#pragma pack(pop)
-
-typedef struct {
-	int channels;
-	int samplesPerSec;
-	int bitsPerSample;
-	void *data;
-	size_t size;
-} Sound;
-
-Sound LoadSoundFromMemory (void *data, size_t size) {
-	WavHeader *header = (WavHeader*)data;
-	WavFormatChunk *format = NULL;
-	WavDataChunk *dataChunk = NULL;
-	char *f = (char*)(header + 1);
-	while (f < (char*)data + size) {
-		int id = *(int*)f;
-		uint size = *(uint*)(f+4);
-		if (id == (('f'<<0)|('m'<<8)|('t'<<16)|(' '<<24))) {
-			format = (WavFormatChunk*)f;
-		}
-		if (id == (('d'<<0)|('a'<<8)|('t'<<16)|('a'<<24))) {
-			dataChunk = (WavDataChunk*)f;
-			dataChunk->data = f + 8;
-		}
-		f += size + 8;
-	}
-
-	Sound sound;
-	if (format && dataChunk) {
-		sound.channels = format->channels;
-		sound.samplesPerSec = format->samplesPerSec;
-		sound.bitsPerSample = format->bitsPerSample;
-		sound.data = dataChunk->data;
-		sound.size = dataChunk->size;
-	}
-	return sound;
-}
 
 typedef HRESULT WINAPI DirectSoundCreateProc (LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter);
 
