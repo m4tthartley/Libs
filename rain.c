@@ -46,6 +46,9 @@ typedef struct {
 
 	double dt; // Seconds
 	double dt60; // Out of 60th of a second
+	int64 start_time;
+	int64 time;
+	float time_s;
 	int64 old_time;
 
 	digital_button keys[256];

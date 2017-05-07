@@ -93,6 +93,39 @@ typedef enum {
 	KEYBOARD_F10 = VK_F10,
 	KEYBOARD_F11 = VK_F11,
 	KEYBOARD_F12 = VK_F12,
+
+	KEY_LEFT = VK_LEFT,
+	KEY_RIGHT = VK_RIGHT,
+	KEY_UP = VK_UP,
+	KEY_DOWN = VK_DOWN,
+
+	KEY_LCTRL = VK_LCONTROL,
+	KEY_RCTRL = VK_RCONTROL,
+	KEY_CTRL = VK_CONTROL,
+	KEY_LSHIFT = VK_LSHIFT,
+	KEY_RSHIFT = VK_RSHIFT,
+	KEY_SHIFT = VK_SHIFT,
+
+	KEY_ALT = VK_MENU,
+	KEY_CAPS = VK_CAPITAL,
+	KEY_TAB = VK_TAB,
+	KEY_SPACE = VK_SPACE,
+	KEY_RETURN = VK_RETURN,
+	KEY_BACKSPACE = VK_BACK,
+	KEY_ESCAPE = VK_ESCAPE,
+
+	KEY_F1 = VK_F1,
+	KEY_F2 = VK_F2,
+	KEY_F3 = VK_F3,
+	KEY_F4 = VK_F4,
+	KEY_F5 = VK_F5,
+	KEY_F6 = VK_F6,
+	KEY_F7 = VK_F7,
+	KEY_F8 = VK_F8,
+	KEY_F9 = VK_F9,
+	KEY_F10 = VK_F10,
+	KEY_F11 = VK_F11,
+	KEY_F12 = VK_F12,
 } KeyID;
 
 LARGE_INTEGER _globalPerformanceFrequency = {0};
@@ -131,8 +164,8 @@ RainWin32 _win32;
 //	VIDEO_MODE_HARDWARE,
 //} VideoMode;
 
-#define PrintOut(...) fprintf(stdout, __VA_ARGS__);
-#define PrintErr(...) fprintf(stderr, __VA_ARGS__);
+#define PrintOut(...) debug_print(__VA_ARGS__); //fprintf(stdout, __VA_ARGS__);
+#define PrintErr(...) debug_print(__VA_ARGS__); //fprintf(stderr, __VA_ARGS__);
 
 double GetSeconds () {
 	if (!_globalPerformanceFrequency.QuadPart) {
@@ -159,7 +192,7 @@ float ConvertToSeconds (int64 time) {
 }
 
 LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
-	Rain *rain = (Rain*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+	Rain *rain = (Rain*)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
 
 	LRESULT result = 0;
 	switch (message) {
@@ -205,7 +238,7 @@ void PollEvents (Rain *rain) {
 	//os->input.keysLast[Message.wParam] = os->input.keys[Message.wParam];
 	//memcpy(rain->input.keys_last, rain->input.keys, sizeof(rain->input.keys));
 
-	char keyboard[256] = {0};
+	BYTE keyboard[256] = {0};
 	GetKeyboardState(keyboard);
 	for (int i = 0; i < 256; ++i) {
 		update_digital_button(&rain->keys[i], keyboard[i]>>7);
@@ -560,9 +593,10 @@ void rain_init(Rain *rain) {
 		InitOpenglVideo(rain);
 	}
 
-	SetWindowLongPtr(_win32.window, GWLP_USERDATA, (LONG)rain);
+	SetWindowLongPtrA(_win32.window, GWLP_USERDATA, (LONG_PTR)rain);
 
-	rain->old_time = GetTime();
+	rain->start_time = GetTime();
+	rain->old_time = rain->start_time;
 }
 
 void rain_update(Rain *rain) {
@@ -581,8 +615,11 @@ void rain_update(Rain *rain) {
 	PollEvents(rain);
 
 	int64 time = GetTime();
+	//debug_print("time %f\n", ConvertToSeconds(time));
 	rain->dt = ConvertToSeconds(time - rain->old_time);
 	rain->dt60 = rain->dt*60.0;
+	rain->time = time - rain->start_time;
+	rain->time_s = ConvertToSeconds(time - rain->start_time);
 	rain->old_time = time;
 }
 
@@ -739,8 +776,7 @@ int GetSoundDeviceWriteCursor () {
 	HRESULT result;
 	if (result = IDirectSoundBuffer_GetCurrentPosition(secondaryBuffer, (LPDWORD)&playCursor, (LPDWORD)&writeCursor) != DS_OK) {
 		PrintErr("IDirectSoundBuffer_GetCurrentPosition error\n");
-		// @todo handle failure
-		return 0; // zero?
+		return 0;
 	}
 
 	return writeCursor / 4; // convert to samples

@@ -24,6 +24,19 @@ typedef char GLchar;
 #define GL_MULTISAMPLE_ARB                0x809D
 #define GL_RGB32F                         0x8815
 
+#define GL_TEXTURE0                       0x84C0
+#define GL_TEXTURE1                       0x84C1
+#define GL_TEXTURE2                       0x84C2
+#define GL_TEXTURE3                       0x84C3
+#define GL_TEXTURE4                       0x84C4
+#define GL_TEXTURE5                       0x84C5
+#define GL_TEXTURE6                       0x84C6
+#define GL_TEXTURE7                       0x84C7
+
+#define GL_COLOR_ATTACHMENT0              0x8CE0
+#define GL_FRAMEBUFFER                    0x8D40
+#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+
 //typedef unsigned int GLuint;
 //typedef int GLint;
 //typedef unsigned int GLenum;
@@ -40,6 +53,8 @@ typedef char GLchar;
 	GLE(void, UseProgram, GLuint program)\
 	GLE(void, GetShaderiv, GLuint shader, GLenum pname, GLint *params)\
 	GLE(void, DeleteProgram, GLuint program)\
+	GLE(void, DeleteShader, GLuint shader)\
+	GLE(void, DetachShader,	GLuint program, GLuint shader)\
 	\
 	GLE(void, EnableVertexAttribArray, GLuint index)\
 	GLE(void, VertexAttribPointer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid * pointer)\
@@ -52,7 +67,16 @@ typedef char GLchar;
 	GLE(void, Uniform4f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3)\
 	GLE(void, Uniform1i, GLint location, int i)\
 	GLE(GLint, GetAttribLocation, GLuint program, const GLchar *name)\
-
+	\
+	GLE(void, ActiveTexture, GLenum texture)\
+	\
+	GLE(void, GenFramebuffers, GLsizei n,  GLuint * framebuffers)\
+	GLE(void, BindFramebuffer, GLenum target,  GLuint framebuffer)\
+	GLE(void, FramebufferTexture, GLenum target, GLenum attachment, GLuint texture, GLint level)\
+	GLE(void, FramebufferTexture2D, GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)\
+	GLE(void, DrawBuffers, GLsizei n, const GLenum *bufs)\
+	GLE(GLenum, CheckFramebufferStatus, GLenum target)\
+	GLE(void, BlitFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)\
 
 #define GLE(ret, name, ...) typedef ret (GLDECL name##_proc)(__VA_ARGS__); name##_proc *gl##name;
 OPENGL_EXTENSION_LIST
@@ -185,9 +209,19 @@ GLuint create_gl_shader_file(char *source, int len, GLenum type) {
 		if (type == GL_GEOMETRY_SHADER) error_out = &gs_error;
 		*error_out = (char*)malloc(error_size);
 		glGetShaderInfoLog(shader, error_size, NULL, *error_out);
+		OutputDebugString("----------------------------------------------------------------\n");
 		OutputDebugString(*error_out);
 	}
 	return shader;
+}
+
+#define gl_error() _gl_error(__FILE__, __LINE__)
+void _gl_error(char *file, int line) {
+	GLenum error;
+	while ((error = glGetError()) != GL_NO_ERROR) {
+		int x = 0;
+		debug_print("%s:%i: %s\n", file, line, gluErrorString(error));
+	}
 }
 
 Shader shader_from_file(char *file_name, int shader_types) {
@@ -195,6 +229,7 @@ Shader shader_from_file(char *file_name, int shader_types) {
 	fs_error = NULL;
 	gs_error = NULL;
 	Shader result = {0};
+	GLuint program = 0;
 
 	FILETIME write_time = {0};
 	HANDLE file = CreateFileA(file_name, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -205,7 +240,8 @@ Shader shader_from_file(char *file_name, int shader_types) {
 	int file_size = GetFileSize(file, 0);
 	HANDLE file_mapping = CreateFileMappingA(file, NULL, PAGE_WRITECOPY, 0, 0, 0);
 	char *source = (char*)MapViewOfFileEx(file_mapping, FILE_MAP_COPY, 0, 0, 0, 0);
-	GLuint program = glCreateProgram();
+	program = glCreateProgram();
+	gl_error();
 	if (shader_types & SHADER_VERTEX) {
 		GLuint shader = create_gl_shader_file(source, file_size, GL_VERTEX_SHADER);
 		if (!vs_error) glAttachShader(program, shader);
@@ -219,6 +255,10 @@ Shader shader_from_file(char *file_name, int shader_types) {
 		if (!gs_error) glAttachShader(program, shader);
 	}
 
+	gl_error();
+
+	UnmapViewOfFile(source);
+	CloseHandle(file_mapping);
 	CloseHandle(file);
 
 	if (vs_error || fs_error || gs_error) {
@@ -227,6 +267,8 @@ Shader shader_from_file(char *file_name, int shader_types) {
 
 	glLinkProgram(program);
 	// todo: detatch and delete shaders
+
+	gl_error();
 
 end:
 	result.gl_program = program;
@@ -237,9 +279,237 @@ end:
 	return result;
 }
 
+struct FileResult {
+	union {
+		void *data;
+		char *str;
+	};
+	int64 size;
+};
+FileResult load_file(char *file) {
+	FileResult res;
+	FILE *f = fopen(file, "rb");
+	fseek(f, 0, SEEK_END);
+	res.size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	res.data = malloc(res.size);
+	fread(res.data, 1, res.size, f);
+	fclose(f);
+	return res;
+}
+int64 get_file_time(char *file) {
+	int64 res = 0;
+	HANDLE handle = CreateFileA(file, 0, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (handle != INVALID_HANDLE_VALUE) {
+		//FILETIME write_time;
+		GetFileTime(handle, NULL, NULL, (FILETIME*)&res);
+		//uint64_t time = write_time.dwLowDateTime & (write_time.dwHighDateTime<<32);
+		CloseHandle(handle);
+	}
+	return res;
+}
+
+struct ShaderFile {
+	char file[64];
+	int index;
+	GLenum type;
+	int prog_index;
+	uint64_t time;
+	FileResult file_res;
+	int depends[64];
+	int depends_count;
+};
+struct ShaderProg {
+	GLuint prog;
+	char *vs_file;
+	char *fs_file;
+};
+
+ShaderFile shader_files[64];
+int shader_file_count = 0;
+ShaderProg shader_progs[64];
+int shader_prog_count = 0;
+
+ShaderFile *add_shader_file(char *file) {
+	for (int i = 0; i < shader_file_count; ++i) {
+		if (!strcmp(shader_files[i].file, file)) return &shader_files[i];
+	}
+	if (shader_file_count < array_size(shader_files)) {
+		ShaderFile *sf = &shader_files[shader_file_count];
+		sf->index = shader_file_count++;
+		return sf;
+	} else {
+		debug_print("Out of shader file slots!\n");
+		return NULL;
+	}
+}
+
+void add_shader_file_depend(ShaderFile *sf, int depend) {
+	if (depend != -1) {
+		if (sf->depends_count < array_size(sf->depends)) {
+			sf->depends[sf->depends_count++] = depend;
+		} else {
+			debug_print("Out of depends slots for %s!\n", sf->file);
+		}
+	}
+}
+
+void add_shader_prog(GLuint prog, char *vs, char *fs) {
+	if (shader_prog_count < array_size(shader_progs)) {
+		shader_progs[shader_prog_count++] = {prog, vs, fs};
+	} else {
+		OutputDebugString("Out of shader prog slots!\n");
+	}
+}
+
+ShaderFile *process_shader_file(char *file, int parent_file = -1) {
+	// todo: maybe cache file contents so includes dont get loading multiple times
+	// todo: maybe make file names all lowercase and remove extra spaces n stuff
+
+	FileResult res = load_file(file);
+
+	ShaderFile *sf = add_shader_file(file);
+	//sf->file = file;
+	strcpy(sf->file, file);
+	sf->time = get_file_time(file);
+	add_shader_file_depend(sf, parent_file);
+
+	char *mem = (char*)res.data;
+	int size = res.size;
+	int str = 0;
+	char *inc = "#include";
+	int inc_len = strlen(inc);
+	for (int i = 0; i < size - inc_len; ++i) {
+		int inc_start;
+		if (strncmp(mem+str, inc, inc_len) == 0) {
+			inc_start = str;
+			str += inc_len;
+			while (mem[str] != '"') ++str;
+			char name[64];
+			int name_len = 0;
+			++str;
+			while (mem[str] != '"') name[name_len++] = mem[str++];
+			++str;
+			name[name_len] = 0;
+			//FileResult inc_file = load_file(name);
+			ShaderFile *inc_file = process_shader_file(name, sf->index);
+			char *newmem = (char*)realloc(mem, size + inc_file->file_res.size - inc_len);
+			memcpy(newmem + inc_start + inc_file->file_res.size, newmem + str, size-str);
+			memcpy(newmem + inc_start, inc_file->file_res.data, inc_file->file_res.size);
+			size = inc_start + inc_file->file_res.size + (size-str);
+			mem = newmem;
+		} else {
+			++str;
+		}
+	}
+
+	debug_print("Processed shader file %s \n", file);
+
+	mem[size] = 0;
+	sf->file_res = {mem, size};
+	return sf;
+}
+
+GLuint create_sub_shader(char *source, int size, GLenum type) {
+	GLuint shader = glCreateShader(type);
+	glShaderSource(shader, 1, &source, &size);
+	glCompileShader(shader);
+	int error_size;
+	glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &error_size);
+	if (error_size) {
+		char *error = (char*)malloc(error_size);
+		glGetShaderInfoLog(shader, error_size, NULL, error);
+		OutputDebugString("----------------------------------------------------------------\n");
+		OutputDebugString(error);
+		return 0;
+	}
+	return shader;
+}
+
+int create_shader_vf(char *vs, char *fs, int slot = -1) {
+	vs_error = NULL;
+	fs_error = NULL;
+	Shader result = {0};
+	GLuint program = 0;
+
+	if (slot!=-1) {
+		
+	}
+	program = glCreateProgram();
+	gl_error();
+
+	int prog_index;
+	if (slot == -1) {
+		prog_index = shader_prog_count;
+		shader_progs[shader_prog_count++] = {program, vs, fs};
+	} else {
+		prog_index = slot;
+		glDeleteProgram(shader_progs[slot].prog);
+		shader_progs[slot].prog = program;
+		vs = shader_progs[slot].vs_file;
+		fs = shader_progs[slot].fs_file;
+	}
+	/*ShaderFile vsf = {vs, GL_VERTEX_SHADER, prog_index, get_file_time(vs)};
+	ShaderFile fsf = {fs, GL_FRAGMENT_SHADER, prog_index, get_file_time(fs)};*/
+	ShaderFile* vsf = process_shader_file(vs);
+	ShaderFile* fsf = process_shader_file(fs);
+	vsf->prog_index = prog_index;
+	fsf->prog_index = prog_index;
+	vsf->type = GL_VERTEX_SHADER;
+	fsf->type= GL_FRAGMENT_SHADER;
+
+	GLuint vshader = create_sub_shader(vsf->file_res.str, vsf->file_res.size, GL_VERTEX_SHADER);
+	glAttachShader(program, vshader);
+	GLuint fshader = create_sub_shader(fsf->file_res.str, fsf->file_res.size, GL_FRAGMENT_SHADER);
+	glAttachShader(program, fshader);
+	gl_error();
+
+	//if (!vshader || !fshader) return -1;
+
+	glLinkProgram(program);
+	// todo: detatch and delete shaders
+	glDetachShader(program, vshader);
+	glDetachShader(program, fshader);
+	glDeleteShader(vshader);
+	glDeleteShader(fshader);
+
+	gl_error();
+
+	if (slot==-1) {
+		debug_print("Created shader program %i \n", prog_index);
+	} else {
+		debug_print("Reloaded shader program %i \n", prog_index);
+	}
+
+	return prog_index;
+}
+
+int reloads[64];
+int reload_count = 0;
+void add_reload(ShaderFile *sf) {
+	if (reload_count < array_size(reloads)) {
+		if (sf->depends_count == 0) reloads[reload_count++] = sf->prog_index;
+		for (int i = 0; i < sf->depends_count; ++i) {
+			add_reload(&shader_files[sf->depends[i]]);
+		}
+	}
+}
+void update_shaders() {
+	for (int i = 0; i < shader_file_count; ++i) {
+		int64 time = get_file_time(shader_files[i].file);
+		if (time != shader_files[i].time) {
+			add_reload(&shader_files[i]);
+		}
+	}
+	for (int i = 0; i < reload_count; ++i) {
+		create_shader_vf(NULL, NULL, reloads[i]);
+	}
+	reload_count = 0;
+}
+
 void use_shader(Shader *shader) {
-	if (shader->file_name) {
-		HANDLE file = CreateFileA(shader->file_name, /*GENERIC_READ*/0, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	/*if (shader->file_name) {
+		HANDLE file = CreateFileA(shader->file_name, 0, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 		if (file != INVALID_HANDLE_VALUE) {
 			FILETIME write_time;
 			GetFileTime(file, NULL, NULL, &write_time);
@@ -252,8 +522,12 @@ void use_shader(Shader *shader) {
 		} else {
 			OutputDebugString("failed to open shader file\n");
 		}
-	}
+	}*/
 	glUseProgram(shader->gl_program);
+}
+
+void use_shader(int prog_index) {
+	glUseProgram(shader_progs[prog_index].prog);
 }
 
 void no_shader() {

@@ -274,7 +274,7 @@ float4 neg4(float4 v) {
 float length2(float2 v) {
 	float result = sqrtf(v.x*v.x + v.y*v.y);
 #ifdef _WIN32
-	if (isnan(result)) __debugbreak();
+	//if (isnan(result)) __debugbreak();
 #endif
 	return result;
 }
