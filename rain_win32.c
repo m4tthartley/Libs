@@ -16,7 +16,7 @@ void debug_print(char *str, ...) {
 	va_start(args, str);
 
 	char buf[256];
-	vsprintf_s(buf, 256, str, args);
+	vsnprintf_s(buf, 256, _TRUNCATE, str, args);
 	OutputDebugString(buf);
 
 	va_end(args);
@@ -486,7 +486,7 @@ void InitOpenglVideo (Rain *rain) {
 		goto error;
 	}
 
-#if 0
+#if 1
 	wglCreateContextAttribsARB = (wglCreateContextAttribsARB_proc*)wglGetProcAddress("wglCreateContextAttribsARB");
 	wglChoosePixelFormatARB = (wglChoosePixelFormatARB_proc*)wglGetProcAddress("wglChoosePixelFormatARB");
 	wglDeleteContext(glContext);
@@ -500,8 +500,8 @@ void InitOpenglVideo (Rain *rain) {
 		WGL_DEPTH_BITS_ARB, 24,
 		WGL_STENCIL_BITS_ARB, 8,
 
-		WGL_SAMPLE_BUFFERS_ARB, GL_TRUE,
-		WGL_SAMPLES_ARB, 8,
+		/*WGL_SAMPLE_BUFFERS_ARB, GL_TRUE,
+		WGL_SAMPLES_ARB, 8,*/
 		0,
 	};
 	int format;

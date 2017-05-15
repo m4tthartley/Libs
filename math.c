@@ -2,13 +2,20 @@
 	Vectors, matrices, quaternions
 */
 
+#define _CRT_SECURE_NO_WARNINGS
 #include <math.h>
+#include <string.h>
+#include <stdlib.h>
 
 #ifndef _GIANTJELLY_MATH_
 #define _GIANTJELLY_MATH_
 
 #define PI 3.14159265359f
 #define PI2 (3.14159265359f*2.0f)
+#undef min
+#undef max
+#undef near
+#undef far
 
 float todeg(float rad) {
 	return rad/PI * 180.0f;
@@ -638,6 +645,13 @@ mat4 quaternion_to_mat4(quaternion q) {
 	};
 
 	return result;
+}
+
+// Rng
+
+float rand_float() {
+	int r = rand();
+	return (float)r / (float)RAND_MAX;
 }
 
 #endif

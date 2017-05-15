@@ -37,6 +37,8 @@ typedef char GLchar;
 #define GL_FRAMEBUFFER                    0x8D40
 #define GL_FRAMEBUFFER_COMPLETE           0x8CD5
 
+typedef void (APIENTRY  *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
+
 //typedef unsigned int GLuint;
 //typedef int GLint;
 //typedef unsigned int GLenum;
@@ -77,10 +79,17 @@ typedef char GLchar;
 	GLE(void, DrawBuffers, GLsizei n, const GLenum *bufs)\
 	GLE(GLenum, CheckFramebufferStatus, GLenum target)\
 	GLE(void, BlitFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)\
+	\
+	GLE(void, DebugMessageCallback, GLDEBUGPROC callback, void *userParam)\
+	GLE(void, DebugMessageControl, GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint *ids, GLboolean enabled)\
 
 #define GLE(ret, name, ...) typedef ret (GLDECL name##_proc)(__VA_ARGS__); name##_proc *gl##name;
 OPENGL_EXTENSION_LIST
 #undef GLE
+
+void APIENTRY opengl_debug_callback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam) {
+	debug_print("[id:%i] %s\n", id, message);
+}
 
 void load_opengl_extensions() {
 	//HMODULE opengl_lib = LoadLibraryA("opengl32.dll");
@@ -88,6 +97,9 @@ void load_opengl_extensions() {
 #define GLE(ret, name, ...) gl##name = (name##_proc*)wglGetProcAddress("gl" #name);
 	OPENGL_EXTENSION_LIST
 #undef GLE
+
+	glDebugMessageCallback(opengl_debug_callback, NULL);
+	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
 }
 
 typedef struct {
@@ -410,7 +422,7 @@ ShaderFile *process_shader_file(char *file, int parent_file = -1) {
 	return sf;
 }
 
-GLuint create_sub_shader(char *source, int size, GLenum type) {
+GLuint create_sub_shader(char *file, char *source, int size, GLenum type) {
 	GLuint shader = glCreateShader(type);
 	glShaderSource(shader, 1, &source, &size);
 	glCompileShader(shader);
@@ -420,7 +432,8 @@ GLuint create_sub_shader(char *source, int size, GLenum type) {
 		char *error = (char*)malloc(error_size);
 		glGetShaderInfoLog(shader, error_size, NULL, error);
 		OutputDebugString("----------------------------------------------------------------\n");
-		OutputDebugString(error);
+		debug_print("%s %s", file, error);
+		//OutputDebugString(error);
 		return 0;
 	}
 	return shader;
@@ -458,9 +471,9 @@ int create_shader_vf(char *vs, char *fs, int slot = -1) {
 	vsf->type = GL_VERTEX_SHADER;
 	fsf->type= GL_FRAGMENT_SHADER;
 
-	GLuint vshader = create_sub_shader(vsf->file_res.str, vsf->file_res.size, GL_VERTEX_SHADER);
+	GLuint vshader = create_sub_shader(vs, vsf->file_res.str, vsf->file_res.size, GL_VERTEX_SHADER);
 	glAttachShader(program, vshader);
-	GLuint fshader = create_sub_shader(fsf->file_res.str, fsf->file_res.size, GL_FRAGMENT_SHADER);
+	GLuint fshader = create_sub_shader(fs, fsf->file_res.str, fsf->file_res.size, GL_FRAGMENT_SHADER);
 	glAttachShader(program, fshader);
 	gl_error();
 
