@@ -23,6 +23,7 @@ typedef char GLchar;
 #define GL_MULTISAMPLE                    0x809D
 #define GL_MULTISAMPLE_ARB                0x809D
 #define GL_RGB32F                         0x8815
+#define GL_LINK_STATUS                    0x8B82
 
 #define GL_TEXTURE0                       0x84C0
 #define GL_TEXTURE1                       0x84C1
@@ -34,8 +35,36 @@ typedef char GLchar;
 #define GL_TEXTURE7                       0x84C7
 
 #define GL_COLOR_ATTACHMENT0              0x8CE0
+#define GL_COLOR_ATTACHMENT1              0x8CE1
+#define GL_COLOR_ATTACHMENT2              0x8CE2
+#define GL_COLOR_ATTACHMENT3              0x8CE3
+#define GL_COLOR_ATTACHMENT4              0x8CE4
+#define GL_COLOR_ATTACHMENT5              0x8CE5
+#define GL_COLOR_ATTACHMENT6              0x8CE6
+#define GL_COLOR_ATTACHMENT7              0x8CE7
+#define GL_COLOR_ATTACHMENT8              0x8CE8
+#define GL_COLOR_ATTACHMENT9              0x8CE9
+#define GL_COLOR_ATTACHMENT10             0x8CEA
+#define GL_COLOR_ATTACHMENT11             0x8CEB
+#define GL_COLOR_ATTACHMENT12             0x8CEC
+#define GL_COLOR_ATTACHMENT13             0x8CED
+#define GL_COLOR_ATTACHMENT14             0x8CEE
+#define GL_COLOR_ATTACHMENT15             0x8CEF
 #define GL_FRAMEBUFFER                    0x8D40
 #define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+
+#define GL_RGBA32F                        0x8814
+#define GL_RGB32F                         0x8815
+#define GL_RGBA16F                        0x881A
+#define GL_RGB16F                         0x881B
+
+#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
+#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
+#define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
+#define GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS 0x8CD9
 
 typedef void (APIENTRY  *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
 
@@ -57,6 +86,8 @@ typedef void (APIENTRY  *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLe
 	GLE(void, DeleteProgram, GLuint program)\
 	GLE(void, DeleteShader, GLuint shader)\
 	GLE(void, DetachShader,	GLuint program, GLuint shader)\
+	GLE(void, GetProgramiv, GLuint program, GLenum pname, GLint *params)\
+	\
 	\
 	GLE(void, EnableVertexAttribArray, GLuint index)\
 	GLE(void, VertexAttribPointer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid * pointer)\
@@ -227,14 +258,14 @@ GLuint create_gl_shader_file(char *source, int len, GLenum type) {
 	return shader;
 }
 
-#define gl_error() _gl_error(__FILE__, __LINE__)
-void _gl_error(char *file, int line) {
-	GLenum error;
-	while ((error = glGetError()) != GL_NO_ERROR) {
-		int x = 0;
-		debug_print("%s:%i: %s\n", file, line, gluErrorString(error));
-	}
-}
+//#define gl_error() _gl_error(__FILE__, __LINE__)
+//void _gl_error(char *file, int line) {
+//	GLenum error;
+//	while ((error = glGetError()) != GL_NO_ERROR) {
+//		int x = 0;
+//		debug_print("%s:%i: %s\n", file, line, gluErrorString(error));
+//	}
+//}
 
 Shader shader_from_file(char *file_name, int shader_types) {
 	vs_error = NULL;
@@ -253,7 +284,6 @@ Shader shader_from_file(char *file_name, int shader_types) {
 	HANDLE file_mapping = CreateFileMappingA(file, NULL, PAGE_WRITECOPY, 0, 0, 0);
 	char *source = (char*)MapViewOfFileEx(file_mapping, FILE_MAP_COPY, 0, 0, 0, 0);
 	program = glCreateProgram();
-	gl_error();
 	if (shader_types & SHADER_VERTEX) {
 		GLuint shader = create_gl_shader_file(source, file_size, GL_VERTEX_SHADER);
 		if (!vs_error) glAttachShader(program, shader);
@@ -267,8 +297,6 @@ Shader shader_from_file(char *file_name, int shader_types) {
 		if (!gs_error) glAttachShader(program, shader);
 	}
 
-	gl_error();
-
 	UnmapViewOfFile(source);
 	CloseHandle(file_mapping);
 	CloseHandle(file);
@@ -279,8 +307,6 @@ Shader shader_from_file(char *file_name, int shader_types) {
 
 	glLinkProgram(program);
 	// todo: detatch and delete shaders
-
-	gl_error();
 
 end:
 	result.gl_program = program;
@@ -299,14 +325,16 @@ struct FileResult {
 	int64 size;
 };
 FileResult load_file(char *file) {
-	FileResult res;
+	FileResult res = {};
 	FILE *f = fopen(file, "rb");
-	fseek(f, 0, SEEK_END);
-	res.size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	res.data = malloc(res.size);
-	fread(res.data, 1, res.size, f);
-	fclose(f);
+	if (f) {
+		fseek(f, 0, SEEK_END);
+		res.size = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		res.data = malloc(res.size);
+		fread(res.data, 1, res.size, f);
+		fclose(f);
+	}
 	return res;
 }
 int64 get_file_time(char *file) {
@@ -358,6 +386,11 @@ ShaderFile *add_shader_file(char *file) {
 
 void add_shader_file_depend(ShaderFile *sf, int depend) {
 	if (depend != -1) {
+		for (int i = 0; i < sf->depends_count; ++i) {
+			if (strcmp(shader_files[sf->depends[i]].file, shader_files[depend].file)==0) {
+				return;
+			}
+		}
 		if (sf->depends_count < array_size(sf->depends)) {
 			sf->depends[sf->depends_count++] = depend;
 		} else {
@@ -377,48 +410,53 @@ void add_shader_prog(GLuint prog, char *vs, char *fs) {
 ShaderFile *process_shader_file(char *file, int parent_file = -1) {
 	// todo: maybe cache file contents so includes dont get loading multiple times
 	// todo: maybe make file names all lowercase and remove extra spaces n stuff
-
-	FileResult res = load_file(file);
+	// todo: make sure shaders get added to the list even if they fail, so they can be reloaded eventually
 
 	ShaderFile *sf = add_shader_file(file);
-	//sf->file = file;
 	strcpy(sf->file, file);
 	sf->time = get_file_time(file);
 	add_shader_file_depend(sf, parent_file);
 
-	char *mem = (char*)res.data;
-	int size = res.size;
-	int str = 0;
-	char *inc = "#include";
-	int inc_len = strlen(inc);
-	for (int i = 0; i < size - inc_len; ++i) {
-		int inc_start;
-		if (strncmp(mem+str, inc, inc_len) == 0) {
-			inc_start = str;
-			str += inc_len;
-			while (mem[str] != '"') ++str;
-			char name[64];
-			int name_len = 0;
-			++str;
-			while (mem[str] != '"') name[name_len++] = mem[str++];
-			++str;
-			name[name_len] = 0;
-			//FileResult inc_file = load_file(name);
-			ShaderFile *inc_file = process_shader_file(name, sf->index);
-			char *newmem = (char*)realloc(mem, size + inc_file->file_res.size - inc_len);
-			memcpy(newmem + inc_start + inc_file->file_res.size, newmem + str, size-str);
-			memcpy(newmem + inc_start, inc_file->file_res.data, inc_file->file_res.size);
-			size = inc_start + inc_file->file_res.size + (size-str);
-			mem = newmem;
-		} else {
-			++str;
+	FileResult res = load_file(file);
+
+	if (res.data) {
+		char *mem = (char*)res.data;
+		int size = res.size;
+		int str = 0;
+		char *inc = "#include";
+		int inc_len = strlen(inc);
+		for (int i = 0; i < size - inc_len; ++i) {
+			int inc_start;
+			if (strncmp(mem+str, inc, inc_len) == 0) {
+				inc_start = str;
+				str += inc_len;
+				while (mem[str] != '"') ++str;
+				char name[64];
+				int name_len = 0;
+				++str;
+				while (mem[str] != '"') name[name_len++] = mem[str++];
+				++str;
+				name[name_len] = 0;
+				//FileResult inc_file = load_file(name);
+				ShaderFile *inc_file = process_shader_file(name, sf->index);
+				char *newmem = (char*)realloc(mem, size + inc_file->file_res.size - inc_len);
+				memcpy(newmem + inc_start + inc_file->file_res.size, newmem + str, size-str);
+				memcpy(newmem + inc_start, inc_file->file_res.data, inc_file->file_res.size);
+				size = inc_start + inc_file->file_res.size + (size-str);
+				mem = newmem;
+			} else {
+				++str;
+			}
 		}
+
+		debug_print("Processed shader file %s \n", file);
+
+		mem[size] = 0;
+		sf->file_res = {mem, size};
+	} else {
+		debug_print("Failed to load shader file %s \n", file);
 	}
 
-	debug_print("Processed shader file %s \n", file);
-
-	mem[size] = 0;
-	sf->file_res = {mem, size};
 	return sf;
 }
 
@@ -449,7 +487,6 @@ int create_shader_vf(char *vs, char *fs, int slot = -1) {
 		
 	}
 	program = glCreateProgram();
-	gl_error();
 
 	int prog_index;
 	if (slot == -1) {
@@ -466,32 +503,33 @@ int create_shader_vf(char *vs, char *fs, int slot = -1) {
 	ShaderFile fsf = {fs, GL_FRAGMENT_SHADER, prog_index, get_file_time(fs)};*/
 	ShaderFile* vsf = process_shader_file(vs);
 	ShaderFile* fsf = process_shader_file(fs);
+
 	vsf->prog_index = prog_index;
 	fsf->prog_index = prog_index;
 	vsf->type = GL_VERTEX_SHADER;
-	fsf->type= GL_FRAGMENT_SHADER;
+	fsf->type = GL_FRAGMENT_SHADER;
+	if (vsf && fsf) {
+		GLuint vshader = create_sub_shader(vs, vsf->file_res.str, vsf->file_res.size, GL_VERTEX_SHADER);
+		glAttachShader(program, vshader);
+		GLuint fshader = create_sub_shader(fs, fsf->file_res.str, fsf->file_res.size, GL_FRAGMENT_SHADER);
+		glAttachShader(program, fshader);
 
-	GLuint vshader = create_sub_shader(vs, vsf->file_res.str, vsf->file_res.size, GL_VERTEX_SHADER);
-	glAttachShader(program, vshader);
-	GLuint fshader = create_sub_shader(fs, fsf->file_res.str, fsf->file_res.size, GL_FRAGMENT_SHADER);
-	glAttachShader(program, fshader);
-	gl_error();
+		//if (!vshader || !fshader) return -1;
 
-	//if (!vshader || !fshader) return -1;
+		glLinkProgram(program);
+		// todo: detach and delete shaders
+		glDetachShader(program, vshader);
+		glDetachShader(program, fshader);
+		glDeleteShader(vshader);
+		glDeleteShader(fshader);
 
-	glLinkProgram(program);
-	// todo: detatch and delete shaders
-	glDetachShader(program, vshader);
-	glDetachShader(program, fshader);
-	glDeleteShader(vshader);
-	glDeleteShader(fshader);
-
-	gl_error();
-
-	if (slot==-1) {
-		debug_print("Created shader program %i \n", prog_index);
+		if (slot==-1) {
+			debug_print("Created shader program %i \n", prog_index);
+		} else {
+			debug_print("Reloaded shader program %i \n", prog_index);
+		}
 	} else {
-		debug_print("Reloaded shader program %i \n", prog_index);
+		debug_print("Failed to process shader files %s %s \n", vs, fs);
 	}
 
 	return prog_index;
@@ -537,10 +575,6 @@ void use_shader(Shader *shader) {
 		}
 	}*/
 	glUseProgram(shader->gl_program);
-}
-
-void use_shader(int prog_index) {
-	glUseProgram(shader_progs[prog_index].prog);
 }
 
 void no_shader() {

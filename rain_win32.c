@@ -581,6 +581,10 @@ void DisplaySoftwareGraphics (Rain *rain, void *data, SoftwarePixelFormat format
 //	SwapBuffers(os->hdc);
 //}
 
+int _window_width;
+int _window_height;
+char *_window_title;
+
 void rain_init(Rain *rain) {
 	if (!rain->window_width || !rain->window_height) {
 		rain->window_width = 1280;
@@ -597,9 +601,30 @@ void rain_init(Rain *rain) {
 
 	rain->start_time = GetTime();
 	rain->old_time = rain->start_time;
+
+	_window_width = rain->window_width;
+	_window_height = rain->window_height;
+	_window_title = rain->window_title;
 }
 
 void rain_update(Rain *rain) {
+	if (rain->window_width != _window_width || rain->window_height != _window_height) {
+		RECT curpos;
+		GetWindowRect(_win32.window, &curpos);
+
+		RECT windowRect;
+		windowRect.left = 0;
+		windowRect.right = rain->window_width;
+		windowRect.top = 0;
+		windowRect.bottom = rain->window_height;
+		AdjustWindowRectEx(&windowRect, WS_OVERLAPPEDWINDOW | WS_VISIBLE, FALSE, 0);
+
+		SetWindowPos(_win32.window, NULL, curpos.left, curpos.top, windowRect.right - windowRect.left, windowRect.bottom - windowRect.top, 0);
+
+		_window_width = rain->window_width;
+		_window_height = rain->window_height;
+	}
+
 	if (rain->software_video) {
 		//InitSoftwareVideo(rain);
 		StretchDIBits(_win32.hdc, 0, 0,

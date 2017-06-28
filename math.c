@@ -34,6 +34,10 @@ typedef union {
 		int u;
 		int v;
 	};
+	struct {
+		int w;
+		int h;
+	};
 } int2;
 
 typedef union {
