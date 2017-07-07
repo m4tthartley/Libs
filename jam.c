@@ -8,8 +8,8 @@
 #	include <OpenGL/gl.h>
 #endif
 
-//#define STB_IMAGE_IMPLEMENTATION
-//#include "stb_image.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 typedef struct {
 	int width;
@@ -17,20 +17,20 @@ typedef struct {
 	GLuint id;
 } Texture;
 
-//GLuint load_image(char *file) {
-//	GLuint tex;
-//	int width;
-//	int height;
-//	int components = 0;
-//	uint8 *image_data = stbi_load(file, &width, &height, &components, 0);
-//	glGenTextures(1, &tex);
-//	glBindTexture(GL_TEXTURE_2D, tex);
-//	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-//	stbi_image_free(image_data);
-//	return tex;
-//}
+GLuint load_image(char *file) {
+	GLuint tex;
+	int width;
+	int height;
+	int components = 0;
+	uint8 *image_data = stbi_load(file, &width, &height, &components, 0);
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	stbi_image_free(image_data);
+	return tex;
+}
 
 Sound load_audio(char *file) {
 	FILE *sound = fopen(file, "rb");

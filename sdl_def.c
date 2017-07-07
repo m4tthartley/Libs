@@ -9,8 +9,12 @@ typedef int16_t Sint16;
 typedef int32_t Sint32;
 typedef int64_t Sint64;
 
-typedef SDL_Window;
-typedef SDL_GLContext;
+typedef void SDL_Window;
+typedef void SDL_GLContext;
+
+#define SDL_BUTTON_LEFT     1
+#define SDL_BUTTON_MIDDLE   2
+#define SDL_BUTTON_RIGHT    3
 
 typedef enum {
     SDL_WINDOW_FULLSCREEN = 0x00000001,

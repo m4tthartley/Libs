@@ -10,6 +10,7 @@
 	SDL_PROC(SDL_Window*, SDL_CreateWindow, const char* title, int x, int y, int w, int h, Uint32 flags)\
 	SDL_PROC(SDL_GLContext, SDL_GL_CreateContext, SDL_Window* window)\
 	SDL_PROC(void, SDL_GL_SwapWindow, SDL_Window* window)\
+	SDL_PROC(int, SDL_GL_SetSwapInterval, int interval)\
 	SDL_PROC(int, SDL_PollEvent, SDL_Event* event)\
 	SDL_PROC(const Uint8*, SDL_GetKeyboardState, int* numkeys)\
 	SDL_PROC(Uint64, SDL_GetPerformanceCounter, void)\
@@ -23,7 +24,7 @@ SDL_PROCS
 
 void load_sdl_procs() {
 	void *sdl_lib = dlopen("libSDL2.dylib", RTLD_LAZY);
-	#define SDL_PROC(ret, name, ...) name = dlsym(sdl_lib, #name);
+	#define SDL_PROC(ret, name, ...) name = (name##_proc*)dlsym(sdl_lib, #name);
 	SDL_PROCS
 	#undef SDL_PROC
 }
@@ -116,6 +117,40 @@ typedef enum {
 	KEYBOARD_F10 = SDL_SCANCODE_F10,
 	KEYBOARD_F11 = SDL_SCANCODE_F11,
 	KEYBOARD_F12 = SDL_SCANCODE_F12,
+	
+	KEY_LEFT = SDL_SCANCODE_LEFT,
+	KEY_RIGHT = SDL_SCANCODE_RIGHT,
+	KEY_UP = SDL_SCANCODE_UP,
+	KEY_DOWN = SDL_SCANCODE_DOWN,
+	KEY_LCTRL = SDL_SCANCODE_LCTRL,
+	KEY_RCTRL = SDL_SCANCODE_RCTRL,
+	KEY_CTRL = SDL_SCANCODE_LCTRL,
+	KEY_LSHIFT = SDL_SCANCODE_LSHIFT,
+	KEY_RSHIFT = SDL_SCANCODE_RSHIFT,
+	KEY_SHIFT = SDL_SCANCODE_LSHIFT,
+	KEY_ALT = SDL_SCANCODE_MENU,
+	KEY_CAPS = SDL_SCANCODE_CAPSLOCK,
+	KEY_TAB = SDL_SCANCODE_TAB,
+	KEY_SPACE = SDL_SCANCODE_SPACE,
+	KEY_RETURN = SDL_SCANCODE_RETURN,
+	KEY_BACKSPACE = SDL_SCANCODE_BACKSPACE,
+	KEY_ESCAPE = SDL_SCANCODE_ESCAPE,
+	KEY_F1 = SDL_SCANCODE_F1,
+	KEY_F2 = SDL_SCANCODE_F2,
+	KEY_F3 = SDL_SCANCODE_F3,
+	KEY_F4 = SDL_SCANCODE_F4,
+	KEY_F5 = SDL_SCANCODE_F5,
+	KEY_F6 = SDL_SCANCODE_F6,
+	KEY_F7 = SDL_SCANCODE_F7,
+	KEY_F8 = SDL_SCANCODE_F8,
+	KEY_F9 = SDL_SCANCODE_F9,
+	KEY_F10 = SDL_SCANCODE_F10,
+	KEY_F11 = SDL_SCANCODE_F11,
+	KEY_F12 = SDL_SCANCODE_F12,
+
+	KEY_WINDOWS = SDL_SCANCODE_APPLICATION,
+	KEY_LGUI = SDL_SCANCODE_LGUI,
+	KEY_RGUI = SDL_SCANCODE_RGUI,
 } KeyID;
 
 typedef struct {
@@ -144,31 +179,63 @@ void rain_init(Rain *rain) {
 		rain->window_width = 1280;
 		rain->window_height = 720;
 	}
+	if (!rain->window_title) {
+		rain->window_title = "Rain";
+	}
 
 	load_sdl_procs();
 
 	SDL_SetMainReady();
 	SDL_Init(SDL_INIT_VIDEO);
 	
-	_sdl.window = SDL_CreateWindow("The Street Life",
-										  SDL_WINDOWPOS_CENTERED,
-										  SDL_WINDOWPOS_CENTERED,
-										  rain->window_width, rain->window_height,
-										  SDL_WINDOW_SHOWN|SDL_WINDOW_OPENGL);
+	_sdl.window = SDL_CreateWindow(rain->window_title,
+								   SDL_WINDOWPOS_CENTERED,
+								   SDL_WINDOWPOS_CENTERED,
+								   rain->window_width, rain->window_height,
+								   SDL_WINDOW_SHOWN|SDL_WINDOW_OPENGL);
 	
 	/*SDL_GLContext gl_context =*/ SDL_GL_CreateContext(_sdl.window);
 
-	rain->old_time = GetTime();
+	rain->start_time = GetTime();
+	rain->old_time = rain->start_time;
 }
 
 void rain_update(Rain *rain) {
 	SDL_GL_SwapWindow(_sdl.window);
 
+	rain->mouse.position_delta.x = 0;
+	rain->mouse.position_delta.y = 0;
+	rain->mouse.wheel_delta = 0;
+	
+	rain->mouse.left.pressed = false;
+	rain->mouse.left.released = false;
+	rain->mouse.right.pressed = false;
+	rain->mouse.right.released = false;
+	rain->mouse.middle.pressed = false;
+	rain->mouse.middle.released = false;
+	
 	SDL_Event event;
 	while (SDL_PollEvent(&event)) {
 		switch (event.type) {
 			case SDL_QUIT:
 				rain->quit = true;
+				break;
+			case SDL_MOUSEBUTTONDOWN:
+				if (event.button.button == SDL_BUTTON_LEFT) update_digital_button(&rain->mouse.left, true);
+				if (event.button.button == SDL_BUTTON_RIGHT) update_digital_button(&rain->mouse.right, true);
+				if (event.button.button == SDL_BUTTON_MIDDLE) update_digital_button(&rain->mouse.middle, true);
+				break;
+			case SDL_MOUSEBUTTONUP:
+				if (event.button.button == SDL_BUTTON_LEFT) update_digital_button(&rain->mouse.left, false);
+				if (event.button.button == SDL_BUTTON_RIGHT) update_digital_button(&rain->mouse.right, false);
+				if (event.button.button == SDL_BUTTON_MIDDLE) update_digital_button(&rain->mouse.middle, false);
+				break;
+			case SDL_MOUSEMOTION:
+				rain->mouse.position = {event.motion.x, event.motion.y};
+				rain->mouse.position_delta = {event.motion.xrel, event.motion.yrel};
+				break;
+			case SDL_MOUSEWHEEL:
+				rain->mouse.wheel_delta += event.wheel.y;
 				break;
 		}
 	}
@@ -185,6 +252,8 @@ void rain_update(Rain *rain) {
 	int64 time = GetTime();
 	rain->dt = ConvertToSeconds(time - rain->old_time);
 	rain->dt60 = rain->dt*60.0;
+	rain->time = time - rain->start_time;
+	rain->time_s = ConvertToSeconds(time - rain->start_time);
 	rain->old_time = time;
 }
 
