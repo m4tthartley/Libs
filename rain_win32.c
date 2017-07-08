@@ -226,6 +226,29 @@ LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wparam, LPARAM 
 			result = DefWindowProc(hwnd, message, wparam, lparam);
 			break;
 		}
+		case WM_SIZE: {
+			if (rain) {
+				RECT rect;
+				GetWindowRect(hwnd, &rect);
+				//debug_print("rect %i %i %i %i\n", rect.left, rect.top, rect.right, rect.bottom);
+
+				RECT windowRect;
+				windowRect.left = 0;
+				windowRect.right = rect.right - rect.left;
+				windowRect.top = 0;
+				windowRect.bottom = rect.bottom - rect.top;
+				AdjustWindowRectEx(&windowRect, WS_OVERLAPPEDWINDOW | WS_VISIBLE, FALSE, 0);
+
+				int2 diff = {
+					(windowRect.right - windowRect.left) - (rect.right - rect.left),
+					(windowRect.bottom - windowRect.top) - (rect.bottom - rect.top),
+				};
+
+				rain->window_width = (rect.right - rect.left) - diff.x;
+				rain->window_height = (rect.bottom - rect.top) - diff.y;
+			}
+			break;
+		}
 		default: {
 			result = DefWindowProc(hwnd, message, wparam, lparam);
 		} break;
@@ -608,6 +631,7 @@ void rain_init(Rain *rain) {
 }
 
 void rain_update(Rain *rain) {
+#if 0
 	if (rain->window_width != _window_width || rain->window_height != _window_height) {
 		RECT curpos;
 		GetWindowRect(_win32.window, &curpos);
@@ -624,6 +648,7 @@ void rain_update(Rain *rain) {
 		_window_width = rain->window_width;
 		_window_height = rain->window_height;
 	}
+#endif
 
 	if (rain->software_video) {
 		//InitSoftwareVideo(rain);
