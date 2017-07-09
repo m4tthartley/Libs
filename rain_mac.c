@@ -200,9 +200,11 @@ void rain_init(Rain *rain) {
 	rain->old_time = rain->start_time;
 }
 
-void rain_update(Rain *rain) {
+void rain_swap_buffers(Rain *rain) {
 	SDL_GL_SwapWindow(_sdl.window);
+}
 
+void rain_poll_input(Rain *rain) {
 	rain->mouse.position_delta.x = 0;
 	rain->mouse.position_delta.y = 0;
 	rain->mouse.wheel_delta = 0;
@@ -255,14 +257,21 @@ void rain_update(Rain *rain) {
 		update_digital_button(&rain->keys[i], keys[i]);
 	}
 	// printf("num keys %i \n", numkeys);
+}
 
-
+void rain_poll_time(Rain *rain) {
 	int64 time = GetTime();
 	rain->dt = ConvertToSeconds(time - rain->old_time);
 	rain->dt60 = rain->dt*60.0;
 	rain->time = time - rain->start_time;
 	rain->time_s = ConvertToSeconds(time - rain->start_time);
 	rain->old_time = time;
+}
+
+void rain_update(Rain *rain) {
+	rain_swap_buffers(rain);
+	rain_poll_input(rain);
+	rain_poll_time(rain);
 }
 
 void InitSound(Rain *rain) {
