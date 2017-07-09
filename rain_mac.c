@@ -192,7 +192,7 @@ void rain_init(Rain *rain) {
 								   SDL_WINDOWPOS_CENTERED,
 								   SDL_WINDOWPOS_CENTERED,
 								   rain->window_width, rain->window_height,
-								   SDL_WINDOW_SHOWN|SDL_WINDOW_OPENGL);
+								   SDL_WINDOW_SHOWN|SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
 	
 	/*SDL_GLContext gl_context =*/ SDL_GL_CreateContext(_sdl.window);
 
@@ -236,6 +236,14 @@ void rain_update(Rain *rain) {
 				break;
 			case SDL_MOUSEWHEEL:
 				rain->mouse.wheel_delta += event.wheel.y;
+				break;
+			case SDL_WINDOWEVENT:
+				switch (event.window.event) {
+					case SDL_WINDOWEVENT_RESIZED:
+						rain->window_width = event.window.data1;
+						rain->window_height = event.window.data2;
+						break;
+				}
 				break;
 		}
 	}
