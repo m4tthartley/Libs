@@ -204,7 +204,7 @@ void rain_swap_buffers(Rain *rain) {
 	SDL_GL_SwapWindow(_sdl.window);
 }
 
-void rain_poll_input(Rain *rain) {
+void rain_poll_events(Rain *rain) {
 	rain->mouse.position_delta.x = 0;
 	rain->mouse.position_delta.y = 0;
 	rain->mouse.wheel_delta = 0;
@@ -270,7 +270,7 @@ void rain_poll_time(Rain *rain) {
 
 void rain_update(Rain *rain) {
 	rain_swap_buffers(rain);
-	rain_poll_input(rain);
+	rain_poll_events(rain);
 	rain_poll_time(rain);
 }
 

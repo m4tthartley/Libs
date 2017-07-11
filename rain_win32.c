@@ -256,7 +256,7 @@ LRESULT CALLBACK WindowCallback (HWND hwnd, UINT message, WPARAM wparam, LPARAM 
 	return result;
 }
 
-void PollEvents (Rain *rain) {
+void rain_poll_events(Rain *rain) {
 	// memset(&os->input.
 	//os->input.keysLast[Message.wParam] = os->input.keys[Message.wParam];
 	//memcpy(rain->input.keys_last, rain->input.keys, sizeof(rain->input.keys));
@@ -630,6 +630,30 @@ void rain_init(Rain *rain) {
 	_window_title = rain->window_title;
 }
 
+void rain_swap_buffers(Rain *rain) {
+	if (rain->software_video) {
+		//InitSoftwareVideo(rain);
+		StretchDIBits(_win32.hdc, 0, 0,
+			rain->window_width, rain->window_height,
+			0, 0,
+			rain->software_video_width, rain->software_video_height,
+			rain->video_memory, &_win32.bitmap_info, DIB_RGB_COLORS, SRCCOPY);
+	} else {
+		SwapBuffers(_win32.hdc); // todo: if this is meant for the top of the loop
+								 // then don't swap the first time
+	}
+}
+
+void rain_poll_time(Rain *rain) {
+	int64 time = GetTime();
+	//debug_print("time %f\n", ConvertToSeconds(time));
+	rain->dt = ConvertToSeconds(time - rain->old_time);
+	rain->dt60 = rain->dt*60.0;
+	rain->time = time - rain->start_time;
+	rain->time_s = ConvertToSeconds(time - rain->start_time);
+	rain->old_time = time;
+}
+
 void rain_update(Rain *rain) {
 #if 0
 	if (rain->window_width != _window_width || rain->window_height != _window_height) {
@@ -650,27 +674,11 @@ void rain_update(Rain *rain) {
 	}
 #endif
 
-	if (rain->software_video) {
-		//InitSoftwareVideo(rain);
-		StretchDIBits(_win32.hdc, 0, 0,
-					  rain->window_width, rain->window_height,
-					  0, 0,
-					  rain->software_video_width, rain->software_video_height,
-					  rain->video_memory, &_win32.bitmap_info, DIB_RGB_COLORS, SRCCOPY);
-	} else {
-		SwapBuffers(_win32.hdc); // todo: if this is meant for the top of the loop
-									  // then don't swap the first time
-	}
+	rain_swap_buffers(rain);
 
-	PollEvents(rain);
+	rain_poll_events(rain);
 
-	int64 time = GetTime();
-	//debug_print("time %f\n", ConvertToSeconds(time));
-	rain->dt = ConvertToSeconds(time - rain->old_time);
-	rain->dt60 = rain->dt*60.0;
-	rain->time = time - rain->start_time;
-	rain->time_s = ConvertToSeconds(time - rain->start_time);
-	rain->old_time = time;
+	rain_poll_time(rain);
 }
 
 #define main_entry int CALLBACK WinMain (HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR cmdLine, int cmdShow)
