@@ -1,6 +1,7 @@
 
 #include <dlfcn.h>
 #include <assert.h>
+#include <OpenGL/gl.h>
 
 #include "sdl_def.c"
 
@@ -15,6 +16,7 @@
 	SDL_PROC(const Uint8*, SDL_GetKeyboardState, int* numkeys)\
 	SDL_PROC(Uint64, SDL_GetPerformanceCounter, void)\
 	SDL_PROC(Uint64, SDL_GetPerformanceFrequency, void)\
+	SDL_PROC(int, SDL_GL_SetAttribute, SDL_GLattr attr, int value)\
 
 	//SDL_PROC()\
 
@@ -188,6 +190,11 @@ void rain_init(Rain *rain) {
 	SDL_SetMainReady();
 	SDL_Init(SDL_INIT_VIDEO);
 	
+	if (rain->multisample_window) {
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
+	}
+
 	_sdl.window = SDL_CreateWindow(rain->window_title,
 								   SDL_WINDOWPOS_CENTERED,
 								   SDL_WINDOWPOS_CENTERED,
@@ -195,6 +202,10 @@ void rain_init(Rain *rain) {
 								   SDL_WINDOW_SHOWN|SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
 	
 	/*SDL_GLContext gl_context =*/ SDL_GL_CreateContext(_sdl.window);
+
+	if (rain->multisample_window) {
+		glEnable(GL_MULTISAMPLE);
+	}
 
 	rain->start_time = GetTime();
 	rain->old_time = rain->start_time;

@@ -36,6 +36,7 @@ typedef struct {
 	int window_width;
 	int window_height;
 	char *window_title;
+	bool multisample_window;
 
 	bool software_video;
 	int software_video_width;
