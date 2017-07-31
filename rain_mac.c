@@ -17,6 +17,10 @@
 	SDL_PROC(Uint64, SDL_GetPerformanceCounter, void)\
 	SDL_PROC(Uint64, SDL_GetPerformanceFrequency, void)\
 	SDL_PROC(int, SDL_GL_SetAttribute, SDL_GLattr attr, int value)\
+	SDL_PROC(Uint32, SDL_RegisterEvents, int numevents)\
+	SDL_PROC(int, SDL_PushEvent, SDL_Event* event)\
+	SDL_PROC(SDL_Scancode, SDL_GetScancodeFromKey, SDL_Keycode key)\
+	SDL_PROC(int, SDL_WaitEvent, SDL_Event* event)\
 
 	//SDL_PROC()\
 
