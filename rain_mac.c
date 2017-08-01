@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <OpenGL/gl.h>
 
+#include "sys.c"
 #include "sdl.c"
 
 // #if 1

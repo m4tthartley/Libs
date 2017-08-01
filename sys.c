@@ -1,4 +1,7 @@
 
+#ifndef _GIANTJELLY_SYS_
+#define _GIANTJELLY_SYS_
+
 typedef void (*SYS_THREAD_PROC)(void *arg);
 // SysThreadProc
 
@@ -136,5 +139,7 @@ DyLib load_dynamic_library(char *file) {
 void *load_library_proc(DyLib lib, char *proc) {
 	return dlsym(lib.handle, proc);
 }
+
+#endif
 
 #endif

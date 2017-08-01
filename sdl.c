@@ -1,4 +1,7 @@
 
+#ifndef _GIANTJELLY_SDL_
+#define _GIANTJELLY_SDL_
+
 #include "sdl_def.c"
 
 #define SDL_PROCS\
@@ -30,3 +33,5 @@ void load_sdl_procs() {
 	SDL_PROCS
 #undef SDL_PROC
 }
+
+#endif
