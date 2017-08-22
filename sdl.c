@@ -20,6 +20,7 @@
 	SDL_PROC(int, SDL_PushEvent, SDL_Event* event)\
 	SDL_PROC(SDL_Scancode, SDL_GetScancodeFromKey, SDL_Keycode key)\
 	SDL_PROC(int, SDL_WaitEvent, SDL_Event* event)\
+	SDL_PROC(const char*, SDL_GetKeyName, SDL_Keycode key)\
 
 //SDL_PROC()\
 
